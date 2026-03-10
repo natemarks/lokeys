@@ -11,19 +11,23 @@ import (
 	"github.com/google/subcommands"
 )
 
-type listCommand struct{}
+type listCommand struct {
+	session bool
+}
 
 func (*listCommand) Name() string     { return "list" }
 func (*listCommand) Synopsis() string { return "list protected files and integrity status" }
 func (*listCommand) Usage() string {
 	return "list\n\tList protected files and verify secure/insecure hashes.\n"
 }
-func (*listCommand) SetFlags(*flag.FlagSet) {}
-func (*listCommand) Execute(_ context.Context, f *flag.FlagSet, _ ...interface{}) subcommands.ExitStatus {
-	return runWithExitStatus(runList(f.Args()))
+func (c *listCommand) SetFlags(fs *flag.FlagSet) {
+	fs.BoolVar(&c.session, "session", false, "reuse encryption key from $LOKEYS_SESSION_KEY for this process")
+}
+func (c *listCommand) Execute(_ context.Context, f *flag.FlagSet, _ ...interface{}) subcommands.ExitStatus {
+	return runWithExitStatus(runList(f.Args(), c.session))
 }
 
-func runList(args []string) error {
+func runList(args []string, session bool) error {
 	if len(args) != 0 {
 		return usageError("list takes no arguments")
 	}
@@ -55,17 +59,21 @@ func runList(args []string) error {
 	if err := ensureEncryptedDir(secureDir); err != nil {
 		return err
 	}
-	if err := ensureRamdiskMounted(insecureDir); err != nil {
-		return err
-	}
 
 	if len(config.ProtectedFiles) == 0 {
 		fmt.Println("No protected files found.")
 		return nil
 	}
 
-	key, err := configKey(config)
+	key, err := keyForCommand(session)
 	if err != nil {
+		return err
+	}
+	if err := validateKeyForExistingProtectedFiles(config, key); err != nil {
+		return err
+	}
+
+	if err := ensureRamdiskMounted(insecureDir); err != nil {
 		return err
 	}
 

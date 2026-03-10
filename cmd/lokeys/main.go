@@ -21,6 +21,7 @@ import (
 	"strings"
 
 	"github.com/google/subcommands"
+	"golang.org/x/sys/unix"
 	"golang.org/x/term"
 )
 
@@ -30,6 +31,7 @@ const (
 	defaultEncryptedRel             = ".lokeys/secure"
 	defaultRamdiskSize              = "100m"
 	defaultMountMode                = "0700"
+	sessionKeyEnv                   = "LOKEYS_SESSION_KEY"
 	configFilePerm      os.FileMode = 0600
 	dirPerm             os.FileMode = 0700
 )
@@ -40,7 +42,6 @@ var version = "dev"
 
 type config struct {
 	ProtectedFiles []string `json:"protectedFiles"`
-	Key            string   `json:"key"`
 }
 
 func main() {
@@ -103,11 +104,7 @@ func ensureConfig() (*config, bool, error) {
 		return nil, false, err
 	}
 
-	key, err := randomKey()
-	if err != nil {
-		return nil, false, err
-	}
-	cfg := &config{ProtectedFiles: []string{}, Key: key}
+	cfg := &config{ProtectedFiles: []string{}}
 	if err := writeConfigTo(path, cfg); err != nil {
 		return nil, false, err
 	}
@@ -143,26 +140,85 @@ func writeConfigTo(path string, cfg *config) error {
 	return os.WriteFile(path, data, configFilePerm)
 }
 
-func configKey(cfg *config) ([]byte, error) {
-	if cfg.Key == "" {
-		key, err := randomKey()
-		if err != nil {
-			return nil, err
-		}
-		cfg.Key = key
-		if err := writeConfig(cfg); err != nil {
-			return nil, err
+func keyForCommand(session bool) ([]byte, error) {
+	if session {
+		if envKey, ok := os.LookupEnv(sessionKeyEnv); ok && strings.TrimSpace(envKey) != "" {
+			return parseKey(strings.TrimSpace(envKey))
 		}
 	}
-	return base64.StdEncoding.DecodeString(cfg.Key)
+
+	key, err := promptForKey()
+	if err != nil {
+		return nil, err
+	}
+
+	if session {
+		if err := os.Setenv(sessionKeyEnv, base64.StdEncoding.EncodeToString(key)); err != nil {
+			return nil, fmt.Errorf("set %s: %w", sessionKeyEnv, err)
+		}
+	}
+
+	return key, nil
 }
 
-func randomKey() (string, error) {
-	key := make([]byte, 32)
-	if _, err := rand.Read(key); err != nil {
-		return "", err
+func promptForKey() ([]byte, error) {
+	if !term.IsTerminal(int(os.Stdin.Fd())) {
+		return nil, fmt.Errorf("encryption key required: run in a terminal")
 	}
-	return base64.StdEncoding.EncodeToString(key), nil
+	fmt.Fprint(os.Stderr, "encryption key (base64 32-byte): ")
+	secret, err := term.ReadPassword(int(os.Stdin.Fd()))
+	fmt.Fprintln(os.Stderr)
+	if err != nil {
+		return nil, err
+	}
+	return parseKey(strings.TrimSpace(string(secret)))
+}
+
+func parseKey(raw string) ([]byte, error) {
+	if raw == "" {
+		return nil, fmt.Errorf("encryption key is empty")
+	}
+	key, err := base64.StdEncoding.DecodeString(raw)
+	if err != nil {
+		return nil, fmt.Errorf("invalid encryption key encoding: %w", err)
+	}
+	if len(key) != 32 {
+		return nil, fmt.Errorf("invalid encryption key length: got %d bytes, want 32", len(key))
+	}
+	return key, nil
+}
+
+func validateKeyForExistingProtectedFiles(cfg *config, key []byte) error {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return err
+	}
+	secureDir := filepath.Join(home, defaultEncryptedRel)
+
+	for _, portable := range cfg.ProtectedFiles {
+		fullPath, err := expandPortablePath(portable)
+		if err != nil {
+			return err
+		}
+		rel, err := relToHome(fullPath)
+		if err != nil {
+			return err
+		}
+		securePath := filepath.Join(secureDir, rel)
+		if !fileExists(securePath) {
+			continue
+		}
+		ciphertext, err := os.ReadFile(securePath)
+		if err != nil {
+			return err
+		}
+		if _, err := decryptBytes(ciphertext, key); err != nil {
+			return fmt.Errorf("invalid encryption key for protected files")
+		}
+		return nil
+	}
+
+	return nil
 }
 
 func ensureEncryptedDir(path string) error {
@@ -174,7 +230,10 @@ func ensureRamdiskMounted(path string) error {
 		return err
 	}
 	if isMounted(path) {
-		return nil
+		if err := unix.Access(path, unix.W_OK|unix.X_OK); err == nil {
+			return nil
+		}
+		return fmt.Errorf("ramdisk mounted at %s is not writable by the current user; unmount and retry: sudo umount %s", path, path)
 	}
 	if !term.IsTerminal(int(os.Stdin.Fd())) {
 		return fmt.Errorf("sudo password required: run in a terminal")

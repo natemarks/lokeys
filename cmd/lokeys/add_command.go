@@ -10,19 +10,23 @@ import (
 	"github.com/google/subcommands"
 )
 
-type addCommand struct{}
+type addCommand struct {
+	session bool
+}
 
 func (*addCommand) Name() string     { return "add" }
 func (*addCommand) Synopsis() string { return "add a file to protected set" }
 func (*addCommand) Usage() string {
 	return "add <path>\n\tAdd file to protected set and replace with RAM-disk symlink.\n"
 }
-func (*addCommand) SetFlags(*flag.FlagSet) {}
-func (*addCommand) Execute(_ context.Context, f *flag.FlagSet, _ ...interface{}) subcommands.ExitStatus {
-	return runWithExitStatus(runAdd(f.Args()))
+func (c *addCommand) SetFlags(fs *flag.FlagSet) {
+	fs.BoolVar(&c.session, "session", false, "reuse encryption key from $LOKEYS_SESSION_KEY for this process")
+}
+func (c *addCommand) Execute(_ context.Context, f *flag.FlagSet, _ ...interface{}) subcommands.ExitStatus {
+	return runWithExitStatus(runAdd(f.Args(), c.session))
 }
 
-func runAdd(args []string) error {
+func runAdd(args []string, session bool) error {
 	if len(args) != 1 {
 		return usageError("add requires a single path")
 	}
@@ -37,8 +41,11 @@ func runAdd(args []string) error {
 	if err != nil {
 		return err
 	}
-	key, err := configKey(config)
+	key, err := keyForCommand(session)
 	if err != nil {
+		return err
+	}
+	if err := validateKeyForExistingProtectedFiles(config, key); err != nil {
 		return err
 	}
 

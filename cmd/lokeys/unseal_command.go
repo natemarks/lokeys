@@ -9,19 +9,23 @@ import (
 	"github.com/google/subcommands"
 )
 
-type unsealCommand struct{}
+type unsealCommand struct {
+	session bool
+}
 
 func (*unsealCommand) Name() string     { return "unseal" }
 func (*unsealCommand) Synopsis() string { return "decrypt all protected files to RAM disk" }
 func (*unsealCommand) Usage() string {
 	return "unseal\n\tDecrypt all protected files into RAM-disk storage.\n"
 }
-func (*unsealCommand) SetFlags(*flag.FlagSet) {}
-func (*unsealCommand) Execute(_ context.Context, f *flag.FlagSet, _ ...interface{}) subcommands.ExitStatus {
-	return runWithExitStatus(runUnseal(f.Args()))
+func (c *unsealCommand) SetFlags(fs *flag.FlagSet) {
+	fs.BoolVar(&c.session, "session", false, "reuse encryption key from $LOKEYS_SESSION_KEY for this process")
+}
+func (c *unsealCommand) Execute(_ context.Context, f *flag.FlagSet, _ ...interface{}) subcommands.ExitStatus {
+	return runWithExitStatus(runUnseal(f.Args(), c.session))
 }
 
-func runUnseal(args []string) error {
+func runUnseal(args []string, session bool) error {
 	if len(args) != 0 {
 		return usageError("unseal takes no arguments")
 	}
@@ -30,8 +34,11 @@ func runUnseal(args []string) error {
 	if err != nil {
 		return err
 	}
-	key, err := configKey(config)
+	key, err := keyForCommand(session)
 	if err != nil {
+		return err
+	}
+	if err := validateKeyForExistingProtectedFiles(config, key); err != nil {
 		return err
 	}
 

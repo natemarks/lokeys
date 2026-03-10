@@ -9,19 +9,23 @@ import (
 	"github.com/google/subcommands"
 )
 
-type sealCommand struct{}
+type sealCommand struct {
+	session bool
+}
 
 func (*sealCommand) Name() string     { return "seal" }
 func (*sealCommand) Synopsis() string { return "encrypt all protected RAM-disk files" }
 func (*sealCommand) Usage() string {
 	return "seal\n\tEncrypt all protected RAM-disk files into secure storage.\n"
 }
-func (*sealCommand) SetFlags(*flag.FlagSet) {}
-func (*sealCommand) Execute(_ context.Context, f *flag.FlagSet, _ ...interface{}) subcommands.ExitStatus {
-	return runWithExitStatus(runSeal(f.Args()))
+func (c *sealCommand) SetFlags(fs *flag.FlagSet) {
+	fs.BoolVar(&c.session, "session", false, "reuse encryption key from $LOKEYS_SESSION_KEY for this process")
+}
+func (c *sealCommand) Execute(_ context.Context, f *flag.FlagSet, _ ...interface{}) subcommands.ExitStatus {
+	return runWithExitStatus(runSeal(f.Args(), c.session))
 }
 
-func runSeal(args []string) error {
+func runSeal(args []string, session bool) error {
 	if len(args) != 0 {
 		return usageError("seal takes no arguments")
 	}
@@ -30,8 +34,11 @@ func runSeal(args []string) error {
 	if err != nil {
 		return err
 	}
-	key, err := configKey(config)
+	key, err := keyForCommand(session)
 	if err != nil {
+		return err
+	}
+	if err := validateKeyForExistingProtectedFiles(config, key); err != nil {
 		return err
 	}
 
