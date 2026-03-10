@@ -18,8 +18,8 @@ func (*sessionExportCommand) Usage() string {
 }
 func (*sessionExportCommand) SetFlags(*flag.FlagSet) {}
 func (*sessionExportCommand) Execute(_ context.Context, f *flag.FlagSet, _ ...interface{}) subcommands.ExitStatus {
-	if len(f.Args()) != 0 {
-		return runWithExitStatus(usageError("session-export takes no arguments"))
+	if err := requireNoArgs(f.Args(), "session-export"); err != nil {
+		return runWithExitStatus(err)
 	}
 
 	exportLine, err := lokeys.RunSessionExport()

@@ -11,29 +11,19 @@ import (
 	"golang.org/x/term"
 )
 
-func keyForCommand(session bool) ([]byte, error) {
-	if session {
-		if envKey, ok := os.LookupEnv(SessionKeyEnv); ok && strings.TrimSpace(envKey) != "" {
-			key, err := decodeEncodedKey(strings.TrimSpace(envKey))
-			if err != nil {
-				return nil, fmt.Errorf("%s must contain an encoded 32-byte key: %w", SessionKeyEnv, err)
-			}
-			return key, nil
+func keyForCommand() ([]byte, error) {
+	if envKey, ok := os.LookupEnv(SessionKeyEnv); ok && strings.TrimSpace(envKey) != "" {
+		key, err := decodeEncodedKey(strings.TrimSpace(envKey))
+		if err != nil {
+			return nil, fmt.Errorf("%s must contain an encoded 32-byte key: %w", SessionKeyEnv, err)
 		}
+		return key, nil
 	}
 
-	key, encoded, err := promptForKey()
+	key, _, err := promptForKey()
 	if err != nil {
 		return nil, err
 	}
-
-	if session {
-		if err := os.Setenv(SessionKeyEnv, encoded); err != nil {
-			return nil, fmt.Errorf("set %s: %w", SessionKeyEnv, err)
-		}
-		fmt.Fprintf(os.Stderr, "session key loaded for this run; export %s in your shell to reuse across commands\n", SessionKeyEnv)
-	}
-
 	return key, nil
 }
 

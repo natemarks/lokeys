@@ -12,23 +12,10 @@ import (
 	"lokeys/internal/lokeys"
 )
 
-const (
-	sessionFlagName = "session"
-	sessionFlagHelp = "reuse encoded encryption key from $LOKEYS_SESSION_KEY for this process"
-)
-
 var version = "dev"
 
 func main() {
-	subcommands.Register(subcommands.HelpCommand(), "")
-	subcommands.Register(subcommands.FlagsCommand(), "")
-	subcommands.Register(subcommands.CommandsCommand(), "")
-	subcommands.Register(&listCommand{}, "")
-	subcommands.Register(&addCommand{}, "")
-	subcommands.Register(&sealCommand{}, "")
-	subcommands.Register(&unsealCommand{}, "")
-	subcommands.Register(&backupCommand{}, "")
-	subcommands.Register(&sessionExportCommand{}, "")
+	registerCommands()
 	if subcommands.DefaultCommander != nil {
 		defaultExplain := subcommands.DefaultCommander.Explain
 		subcommands.DefaultCommander.Explain = func(w io.Writer) {
@@ -36,18 +23,34 @@ func main() {
 				defaultExplain(w)
 			}
 			fmt.Fprintln(w)
-			fmt.Fprintf(w, "Session key mode: pass --session to any data command (add/list/seal/unseal) to use encoded key in %s.\n", lokeys.SessionKeyEnv)
+			fmt.Fprintf(w, "Key source: use encoded key in %s when set; otherwise lokeys prompts securely.\n", lokeys.SessionKeyEnv)
 			fmt.Fprintln(w, "Use `lokeys session-export` to print an export command for your shell session.")
-			fmt.Fprintln(w, "Without --session, lokeys always prompts securely for the encryption key.")
 		}
 	}
 
 	flag.Usage = usage
 	flag.Parse()
-	fmt.Fprintf(os.Stderr, "lokeys version %s\n", version)
 
 	ctx := context.Background()
 	os.Exit(int(subcommands.Execute(ctx)))
+}
+
+func registerCommands() {
+	subcommands.Register(subcommands.HelpCommand(), "")
+	subcommands.Register(subcommands.FlagsCommand(), "")
+	subcommands.Register(subcommands.CommandsCommand(), "")
+	for _, cmd := range []subcommands.Command{
+		&listCommand{},
+		&addCommand{},
+		&removeCommand{},
+		&sealCommand{},
+		&unsealCommand{},
+		&backupCommand{},
+		&sessionExportCommand{},
+		&versionCommand{},
+	} {
+		subcommands.Register(cmd, "")
+	}
 }
 
 func usage() {
@@ -75,6 +78,16 @@ func runWithExitStatus(err error) subcommands.ExitStatus {
 
 var errUsage = errors.New("usage error")
 
-func registerSessionFlag(fs *flag.FlagSet, target *bool) {
-	fs.BoolVar(target, sessionFlagName, false, sessionFlagHelp)
+func requireNoArgs(args []string, command string) error {
+	if len(args) != 0 {
+		return usageError(command + " takes no arguments")
+	}
+	return nil
+}
+
+func requireOneArg(args []string, command string, name string) (string, error) {
+	if len(args) != 1 {
+		return "", usageError(command + " requires a single " + name)
+	}
+	return args[0], nil
 }

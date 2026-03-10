@@ -8,7 +8,7 @@ import (
 )
 
 // RunList lists tracked files and their secure/insecure status.
-func RunList(session bool) error {
+func RunList() error {
 	config, created, err := ensureConfig()
 	if err != nil {
 		return err
@@ -60,7 +60,7 @@ func RunList(session bool) error {
 
 	var key []byte
 	if needsKey {
-		key, err = keyForCommand(session)
+		key, err = keyForCommand()
 		if err != nil {
 			return err
 		}
@@ -72,6 +72,7 @@ func RunList(session bool) error {
 	if err := ensureRamdiskMounted(insecureDir); err != nil {
 		return err
 	}
+	fmt.Println("Legend: OK=match MISSING_INSECURE=RAM copy missing MISSING_SECURE=encrypted copy missing MISMATCH=hash mismatch")
 
 	for _, portable := range config.ProtectedFiles {
 		fullPath, err := expandPortablePath(portable)
@@ -124,7 +125,7 @@ func RunList(session bool) error {
 }
 
 // RunAdd adds a file to protection and replaces it with a RAM-disk symlink.
-func RunAdd(pathArg string, session bool) error {
+func RunAdd(pathArg string) error {
 	fullPath, err := expandUserPath(pathArg)
 	if err != nil {
 		return err
@@ -134,7 +135,7 @@ func RunAdd(pathArg string, session bool) error {
 	if err != nil {
 		return err
 	}
-	key, err := keyForCommand(session)
+	key, err := keyForCommand()
 	if err != nil {
 		return err
 	}
@@ -201,12 +202,12 @@ func RunAdd(pathArg string, session bool) error {
 }
 
 // RunSeal encrypts all tracked RAM-disk files into secure storage.
-func RunSeal(session bool) error {
+func RunSeal() error {
 	config, _, err := ensureConfig()
 	if err != nil {
 		return err
 	}
-	key, err := keyForCommand(session)
+	key, err := keyForCommand()
 	if err != nil {
 		return err
 	}
@@ -252,12 +253,12 @@ func RunSeal(session bool) error {
 }
 
 // RunUnseal decrypts all tracked files into RAM-disk storage.
-func RunUnseal(session bool) error {
+func RunUnseal() error {
 	config, _, err := ensureConfig()
 	if err != nil {
 		return err
 	}
-	key, err := keyForCommand(session)
+	key, err := keyForCommand()
 	if err != nil {
 		return err
 	}
@@ -326,6 +327,110 @@ func RunSessionExport() (string, error) {
 		return "", err
 	}
 	return fmt.Sprintf("export %s='%s'", SessionKeyEnv, encoded), nil
+}
+
+// RunRemove removes a file from protection and cleanup managed copies.
+func RunRemove(pathArg string) error {
+	fullPath, err := expandUserPath(pathArg)
+	if err != nil {
+		return err
+	}
+	portable, err := portablePath(fullPath)
+	if err != nil {
+		return err
+	}
+
+	cfg, _, err := ensureConfig()
+	if err != nil {
+		return err
+	}
+
+	idx := -1
+	for i, p := range cfg.ProtectedFiles {
+		if p == portable {
+			idx = i
+			break
+		}
+	}
+	if idx == -1 {
+		fmt.Printf("%s is not protected.\n", portable)
+		return nil
+	}
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return err
+	}
+	rel, err := relToHome(fullPath)
+	if err != nil {
+		return err
+	}
+	securePath := filepath.Join(home, defaultEncryptedRel, rel)
+	insecurePath := filepath.Join(home, defaultDecryptedRel, rel)
+
+	if err := restoreIfManagedSymlink(fullPath, insecurePath, securePath); err != nil {
+		return err
+	}
+
+	if err := os.Remove(securePath); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	if err := os.Remove(insecurePath); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+
+	cfg.ProtectedFiles = append(cfg.ProtectedFiles[:idx], cfg.ProtectedFiles[idx+1:]...)
+	if err := writeConfig(cfg); err != nil {
+		return err
+	}
+
+	fmt.Printf("removed protection for %s\n", portable)
+	return nil
+}
+
+func restoreIfManagedSymlink(fullPath string, insecurePath string, securePath string) error {
+	info, err := os.Lstat(fullPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	if info.Mode()&os.ModeSymlink == 0 {
+		return nil
+	}
+	target, err := os.Readlink(fullPath)
+	if err != nil {
+		return err
+	}
+	if target != insecurePath {
+		return nil
+	}
+
+	tmpOut := fullPath + ".lokeys.restore"
+	if fileExists(insecurePath) {
+		if err := copyFile(insecurePath, tmpOut, 0600); err != nil {
+			return err
+		}
+	} else if fileExists(securePath) {
+		key, err := keyForCommand()
+		if err != nil {
+			return err
+		}
+		if err := decryptFile(securePath, tmpOut, key); err != nil {
+			return err
+		}
+	} else {
+		return fmt.Errorf("cannot restore %s: neither insecure nor secure copy exists", fullPath)
+	}
+
+	if err := os.Remove(fullPath); err != nil {
+		return err
+	}
+	if err := os.Rename(tmpOut, fullPath); err != nil {
+		return err
+	}
+	return nil
 }
 
 func sha256File(path string) (string, error) {

@@ -28,12 +28,14 @@ go install ./cmd/lokeys
 
 ## Commands
 
-- `lokeys list [--session]` - list tracked files and integrity status
-- `lokeys add [--session] <path>` - add a file to protection, encrypt it, and replace original with symlink to RAM-disk copy
-- `lokeys seal [--session]` - encrypt all tracked RAM-disk files to secure storage
-- `lokeys unseal [--session]` - decrypt all tracked files into RAM disk and ensure symlinks point there
+- `lokeys list` - list tracked files and integrity status
+- `lokeys add <path>` - add a file to protection, encrypt it, and replace original with symlink to RAM-disk copy
+- `lokeys remove <path>` - remove a file from protection and clean up managed copies
+- `lokeys seal` - encrypt all tracked RAM-disk files to secure storage
+- `lokeys unseal` - decrypt all tracked files into RAM disk and ensure symlinks point there
 - `lokeys backup` - create `<epoch>.tar` backup in `~/.lokeys/secure` containing secure files and `.config/lokeys`
 - `lokeys session-export` - prompt once and print an `export LOKEYS_SESSION_KEY=...` line for your shell
+- `lokeys version` - print the build/version string
 - `lokeys help` - show command help
 
 ## Key handling
@@ -41,7 +43,8 @@ go install ./cmd/lokeys
 - `lokeys` never stores encryption keys in config files.
 - You enter a passphrase (must be more than 16 characters).
 - The passphrase is deterministically encoded into a 32-byte AES key (SHA-256, base64-encoded for env storage).
-- `--session` mode uses `LOKEYS_SESSION_KEY` as the encoded key value.
+- If `LOKEYS_SESSION_KEY` is set, lokeys uses it as the encoded key value.
+- If `LOKEYS_SESSION_KEY` is not set, lokeys prompts securely for your passphrase.
 
 To persist session key across multiple commands in your current shell:
 
@@ -49,7 +52,7 @@ To persist session key across multiple commands in your current shell:
 eval "$(./bin/lokeys session-export)"
 ```
 
-Then run commands with `--session` and it will not re-prompt.
+Then run commands and it will not re-prompt while that env var remains set.
 
 ## Fresh install round trip
 
@@ -93,12 +96,19 @@ You will be prompted for:
 ```
 
 You should see `OK` for the tracked file.
+`list` also prints a short legend for status values.
 
 6) Seal and unseal lifecycle
 
 ```bash
 ./bin/lokeys seal
 ./bin/lokeys unseal
+```
+
+Optional: remove protection and restore managed symlinked file
+
+```bash
+./bin/lokeys remove ~/secrets/demo.txt
 ```
 
 7) Create a secure storage backup tarball
@@ -116,9 +126,9 @@ This writes a file like `~/.lokeys/secure/1710076800.tar` and includes:
 
 ```bash
 eval "$(./bin/lokeys session-export)"
-./bin/lokeys list --session
-./bin/lokeys seal --session
-./bin/lokeys unseal --session
+./bin/lokeys list
+./bin/lokeys seal
+./bin/lokeys unseal
 ```
 
 ## Notes

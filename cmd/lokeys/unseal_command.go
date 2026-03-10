@@ -9,24 +9,21 @@ import (
 )
 
 type unsealCommand struct {
-	session bool
 }
 
 func (*unsealCommand) Name() string     { return "unseal" }
 func (*unsealCommand) Synopsis() string { return "decrypt all protected files to RAM disk" }
 func (*unsealCommand) Usage() string {
-	return "unseal [--session]\n\tDecrypt all protected files into RAM-disk storage.\n\t--session uses $LOKEYS_SESSION_KEY (encoded key) or prompts and stores encoded key for this run.\n"
+	return "unseal\n\tDecrypt all protected files into RAM-disk storage.\n"
 }
-func (c *unsealCommand) SetFlags(fs *flag.FlagSet) {
-	registerSessionFlag(fs, &c.session)
-}
+func (*unsealCommand) SetFlags(*flag.FlagSet) {}
 func (c *unsealCommand) Execute(_ context.Context, f *flag.FlagSet, _ ...interface{}) subcommands.ExitStatus {
-	return runWithExitStatus(runUnseal(f.Args(), c.session))
+	return runWithExitStatus(runUnseal(f.Args()))
 }
 
-func runUnseal(args []string, session bool) error {
-	if len(args) != 0 {
-		return usageError("unseal takes no arguments")
+func runUnseal(args []string) error {
+	if err := requireNoArgs(args, "unseal"); err != nil {
+		return err
 	}
-	return lokeys.RunUnseal(session)
+	return lokeys.RunUnseal()
 }

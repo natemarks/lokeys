@@ -2,7 +2,7 @@ package lokeys
 
 import "os"
 
-// SessionKeyEnv stores the encoded session key for --session mode.
+// SessionKeyEnv stores the encoded key used by lokeys commands.
 const (
 	configFileRel       = ".config/lokeys"
 	defaultDecryptedRel = ".lokeys/insecure"

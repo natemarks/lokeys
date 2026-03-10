@@ -22,8 +22,8 @@ func (*backupCommand) Execute(_ context.Context, f *flag.FlagSet, _ ...interface
 }
 
 func runBackup(args []string) error {
-	if len(args) != 0 {
-		return usageError("backup takes no arguments")
+	if err := requireNoArgs(args, "backup"); err != nil {
+		return err
 	}
 	backupPath, err := lokeys.RunBackup()
 	if err != nil {

@@ -44,7 +44,7 @@ func TestRunListFailsFastWithWrongSessionKey(t *testing.T) {
 	}
 
 	t.Setenv(SessionKeyEnv, "this-is-definitely-the-wrong-key")
-	err = RunList(true)
+	err = RunList()
 	if err == nil {
 		t.Fatalf("expected error with wrong key")
 	}
