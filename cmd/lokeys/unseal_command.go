@@ -16,10 +16,10 @@ type unsealCommand struct {
 func (*unsealCommand) Name() string     { return "unseal" }
 func (*unsealCommand) Synopsis() string { return "decrypt all protected files to RAM disk" }
 func (*unsealCommand) Usage() string {
-	return "unseal [--session]\n\tDecrypt all protected files into RAM-disk storage.\n\t--session reuses key from $LOKEYS_SESSION_KEY or prompts once and stores it for this process.\n"
+	return "unseal [--session]\n\tDecrypt all protected files into RAM-disk storage.\n\t--session uses $LOKEYS_SESSION_KEY (encoded key) or prompts and stores encoded key for this run.\n"
 }
 func (c *unsealCommand) SetFlags(fs *flag.FlagSet) {
-	fs.BoolVar(&c.session, "session", false, "reuse encryption key from $LOKEYS_SESSION_KEY for this process")
+	registerSessionFlag(fs, &c.session)
 }
 func (c *unsealCommand) Execute(_ context.Context, f *flag.FlagSet, _ ...interface{}) subcommands.ExitStatus {
 	return runWithExitStatus(runUnseal(f.Args(), c.session))

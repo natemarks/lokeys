@@ -16,10 +16,10 @@ type sealCommand struct {
 func (*sealCommand) Name() string     { return "seal" }
 func (*sealCommand) Synopsis() string { return "encrypt all protected RAM-disk files" }
 func (*sealCommand) Usage() string {
-	return "seal [--session]\n\tEncrypt all protected RAM-disk files into secure storage.\n\t--session reuses key from $LOKEYS_SESSION_KEY or prompts once and stores it for this process.\n"
+	return "seal [--session]\n\tEncrypt all protected RAM-disk files into secure storage.\n\t--session uses $LOKEYS_SESSION_KEY (encoded key) or prompts and stores encoded key for this run.\n"
 }
 func (c *sealCommand) SetFlags(fs *flag.FlagSet) {
-	fs.BoolVar(&c.session, "session", false, "reuse encryption key from $LOKEYS_SESSION_KEY for this process")
+	registerSessionFlag(fs, &c.session)
 }
 func (c *sealCommand) Execute(_ context.Context, f *flag.FlagSet, _ ...interface{}) subcommands.ExitStatus {
 	return runWithExitStatus(runSeal(f.Args(), c.session))

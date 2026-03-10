@@ -17,10 +17,10 @@ type addCommand struct {
 func (*addCommand) Name() string     { return "add" }
 func (*addCommand) Synopsis() string { return "add a file to protected set" }
 func (*addCommand) Usage() string {
-	return "add [--session] <path>\n\tAdd file to protected set and replace with RAM-disk symlink.\n\t--session reuses key from $LOKEYS_SESSION_KEY or prompts once and stores it for this process.\n"
+	return "add [--session] <path>\n\tAdd file to protected set and replace with RAM-disk symlink.\n\t--session uses $LOKEYS_SESSION_KEY (encoded key) or prompts and stores encoded key for this run.\n"
 }
 func (c *addCommand) SetFlags(fs *flag.FlagSet) {
-	fs.BoolVar(&c.session, "session", false, "reuse encryption key from $LOKEYS_SESSION_KEY for this process")
+	registerSessionFlag(fs, &c.session)
 }
 func (c *addCommand) Execute(_ context.Context, f *flag.FlagSet, _ ...interface{}) subcommands.ExitStatus {
 	return runWithExitStatus(runAdd(f.Args(), c.session))

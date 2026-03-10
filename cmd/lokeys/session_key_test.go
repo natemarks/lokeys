@@ -49,8 +49,8 @@ func TestRunListFailsFastWithWrongSessionKey(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected error with wrong key")
 	}
-	if !strings.Contains(err.Error(), "invalid encryption key") {
-		t.Fatalf("expected invalid key error, got: %v", err)
+	if !strings.Contains(err.Error(), "must contain an encoded 32-byte key") {
+		t.Fatalf("expected encoded session key error, got: %v", err)
 	}
 	if errors.Is(err, errUsage) {
 		t.Fatalf("expected runtime failure, got usage error: %v", err)

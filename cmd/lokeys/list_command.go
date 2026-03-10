@@ -18,10 +18,10 @@ type listCommand struct {
 func (*listCommand) Name() string     { return "list" }
 func (*listCommand) Synopsis() string { return "list protected files and integrity status" }
 func (*listCommand) Usage() string {
-	return "list [--session]\n\tList protected files and verify secure/insecure hashes.\n\t--session reuses key from $LOKEYS_SESSION_KEY or prompts once and stores it for this process.\n"
+	return "list [--session]\n\tList protected files and verify secure/insecure hashes.\n\t--session uses $LOKEYS_SESSION_KEY (encoded key) or prompts and stores encoded key for this run.\n"
 }
 func (c *listCommand) SetFlags(fs *flag.FlagSet) {
-	fs.BoolVar(&c.session, "session", false, "reuse encryption key from $LOKEYS_SESSION_KEY for this process")
+	registerSessionFlag(fs, &c.session)
 }
 func (c *listCommand) Execute(_ context.Context, f *flag.FlagSet, _ ...interface{}) subcommands.ExitStatus {
 	return runWithExitStatus(runList(f.Args(), c.session))

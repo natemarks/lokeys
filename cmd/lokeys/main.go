@@ -32,6 +32,8 @@ const (
 	defaultRamdiskSize              = "100m"
 	defaultMountMode                = "0700"
 	sessionKeyEnv                   = "LOKEYS_SESSION_KEY"
+	sessionFlagName                 = "session"
+	sessionFlagHelp                 = "reuse encoded encryption key from $LOKEYS_SESSION_KEY for this process"
 	configFilePerm      os.FileMode = 0600
 	dirPerm             os.FileMode = 0700
 )
@@ -59,7 +61,7 @@ func main() {
 				defaultExplain(w)
 			}
 			fmt.Fprintln(w)
-			fmt.Fprintf(w, "Session key mode: pass --session to any data command (add/list/seal/unseal) to reuse %s.\n", sessionKeyEnv)
+			fmt.Fprintf(w, "Session key mode: pass --session to any data command (add/list/seal/unseal) to use encoded key in %s.\n", sessionKeyEnv)
 			fmt.Fprintln(w, "Without --session, lokeys always prompts securely for the encryption key.")
 		}
 	}
@@ -155,7 +157,11 @@ func writeConfigTo(path string, cfg *config) error {
 func keyForCommand(session bool) ([]byte, error) {
 	if session {
 		if envKey, ok := os.LookupEnv(sessionKeyEnv); ok && strings.TrimSpace(envKey) != "" {
-			return keyFromInput(strings.TrimSpace(envKey))
+			key, err := decodeEncodedKey(strings.TrimSpace(envKey))
+			if err != nil {
+				return nil, fmt.Errorf("%s must contain an encoded 32-byte key: %w", sessionKeyEnv, err)
+			}
+			return key, nil
 		}
 	}
 
@@ -168,6 +174,7 @@ func keyForCommand(session bool) ([]byte, error) {
 		if err := os.Setenv(sessionKeyEnv, encoded); err != nil {
 			return nil, fmt.Errorf("set %s: %w", sessionKeyEnv, err)
 		}
+		fmt.Fprintf(os.Stderr, "session key loaded for this run; export %s in your shell to reuse across commands\n", sessionKeyEnv)
 	}
 
 	return key, nil
@@ -184,18 +191,6 @@ func promptForKey() ([]byte, string, error) {
 		return nil, "", err
 	}
 	return deriveKeyFromPassphrase(strings.TrimSpace(string(secret)))
-}
-
-func keyFromInput(raw string) ([]byte, error) {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return nil, fmt.Errorf("encryption key is empty")
-	}
-	if key, err := decodeEncodedKey(raw); err == nil {
-		return key, nil
-	}
-	key, _, err := deriveKeyFromPassphrase(raw)
-	return key, err
 }
 
 func decodeEncodedKey(raw string) ([]byte, error) {
@@ -497,6 +492,10 @@ func hashOrMissing(value string) string {
 		return "MISSING"
 	}
 	return value
+}
+
+func registerSessionFlag(fs *flag.FlagSet, target *bool) {
+	fs.BoolVar(target, sessionFlagName, false, sessionFlagHelp)
 }
 
 func containsString(values []string, value string) bool {
