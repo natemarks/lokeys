@@ -14,9 +14,12 @@ help: ## Show this help.
 GO_FILES := $(shell find . -name "*.go" -not -path "./vendor/*")
 SH_FILES := $(shell ls scripts/*.sh 2>/dev/null)
 
-.PHONY: static go-static bash-static gofmt-check go-vet golangci-lint go-test shfmt-check shellcheck
+.PHONY: static go-static bash-static gofmt-check go-vet golangci-lint go-test shfmt-check shellcheck build git-clean
 
 static: go-static bash-static ## Run all static checks.
+
+build: git-clean ## Build lokeys with version.
+	go build -ldflags "-X main.version=$(COMMIT)" -o bin/lokeys ./cmd/lokeys
 
 go-static: gofmt-check go-vet golangci-lint go-test ## Run Go checks.
 
@@ -54,4 +57,10 @@ shellcheck: ## Run shellcheck on scripts.
 		shellcheck $(SH_FILES); \
 	else \
 		printf "No Bash scripts found.\n"; \
+	fi
+
+git-clean: ## Fail if git status is dirty.
+	@if [ -n "$(shell git status --porcelain)" ]; then \
+		printf "Git working tree is dirty. Commit or stash changes.\n"; \
+		exit 1; \
 	fi
