@@ -32,6 +32,7 @@ go install ./cmd/lokeys
 - `lokeys add [--session] <path>` - add a file to protection, encrypt it, and replace original with symlink to RAM-disk copy
 - `lokeys seal [--session]` - encrypt all tracked RAM-disk files to secure storage
 - `lokeys unseal [--session]` - decrypt all tracked files into RAM disk and ensure symlinks point there
+- `lokeys backup` - create `<epoch>.tar` backup in `~/.lokeys/secure` containing secure files and `.config/lokeys`
 - `lokeys session-export` - prompt once and print an `export LOKEYS_SESSION_KEY=...` line for your shell
 - `lokeys help` - show command help
 
@@ -100,7 +101,18 @@ You should see `OK` for the tracked file.
 ./bin/lokeys unseal
 ```
 
-7) Optional: avoid repeated key prompts in one shell session
+7) Create a secure storage backup tarball
+
+```bash
+./bin/lokeys backup
+```
+
+This writes a file like `~/.lokeys/secure/1710076800.tar` and includes:
+
+- encrypted files from `~/.lokeys/secure` (excluding the tarball itself)
+- `.config/lokeys`
+
+8) Optional: avoid repeated key prompts in one shell session
 
 ```bash
 eval "$(./bin/lokeys session-export)"

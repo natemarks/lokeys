@@ -54,6 +54,7 @@ func main() {
 	subcommands.Register(&addCommand{}, "")
 	subcommands.Register(&sealCommand{}, "")
 	subcommands.Register(&unsealCommand{}, "")
+	subcommands.Register(&backupCommand{}, "")
 	subcommands.Register(&sessionExportCommand{}, "")
 	if subcommands.DefaultCommander != nil {
 		defaultExplain := subcommands.DefaultCommander.Explain
