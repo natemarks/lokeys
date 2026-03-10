@@ -25,6 +25,7 @@ func main() {
 			fmt.Fprintln(w)
 			fmt.Fprintf(w, "Key source: use encoded key in %s when set; otherwise lokeys prompts securely.\n", lokeys.SessionKeyEnv)
 			fmt.Fprintln(w, "Use `lokeys session-export` to print an export command for your shell session.")
+			fmt.Fprintln(w, "Quick start: eval \"$(lokeys session-export)\"")
 		}
 	}
 
