@@ -48,9 +48,11 @@ lokeys help
 
 - `lokeys` never stores encryption keys in config.
 - You provide a passphrase (must be longer than 16 characters).
-- Passphrase is converted to a 32-byte key (SHA-256).
+- Passphrase is converted to key material, and each encrypted file stores KDF metadata (scrypt params + salt) in its header.
 - If `LOKEYS_SESSION_KEY` is set, lokeys uses it as the encoded key.
 - If `LOKEYS_SESSION_KEY` is not set, lokeys prompts securely.
+
+This means encrypted files are portable: move them to another machine and decrypt with the same passphrase.
 
 Load a key into your current shell session:
 

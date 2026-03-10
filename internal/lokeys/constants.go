@@ -10,9 +10,19 @@ const (
 	defaultRamdiskSize  = "100m"
 	defaultMountMode    = "0700"
 	SessionKeyEnv       = "LOKEYS_SESSION_KEY"
-	fileMagic           = "LOKEYS1"
+	fileMagicV1         = "LOKEYS1"
+	fileMagicV2         = "LOKEYS2"
 	configFilePerm      = os.FileMode(0600)
 	dirPerm             = os.FileMode(0700)
+)
+
+const (
+	kdfScryptID       = 1
+	kdfSaltSize       = 16
+	kdfDerivedKeySize = 32
+	kdfScryptN        = 1 << 15
+	kdfScryptR        = 8
+	kdfScryptP        = 1
 )
 
 type config struct {
