@@ -1,0 +1,73 @@
+package main
+
+import (
+	"context"
+	"flag"
+	"os"
+	"path/filepath"
+
+	"github.com/google/subcommands"
+)
+
+type sealCommand struct{}
+
+func (*sealCommand) Name() string     { return "seal" }
+func (*sealCommand) Synopsis() string { return "encrypt all protected RAM-disk files" }
+func (*sealCommand) Usage() string {
+	return "seal\n\tEncrypt all protected RAM-disk files into secure storage.\n"
+}
+func (*sealCommand) SetFlags(*flag.FlagSet) {}
+func (*sealCommand) Execute(_ context.Context, f *flag.FlagSet, _ ...interface{}) subcommands.ExitStatus {
+	return runWithExitStatus(runSeal(f.Args()))
+}
+
+func runSeal(args []string) error {
+	if len(args) != 0 {
+		return usageError("seal takes no arguments")
+	}
+
+	config, _, err := ensureConfig()
+	if err != nil {
+		return err
+	}
+	key, err := configKey(config)
+	if err != nil {
+		return err
+	}
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return err
+	}
+	secureDir := filepath.Join(home, defaultEncryptedRel)
+	insecureDir := filepath.Join(home, defaultDecryptedRel)
+
+	if err := ensureEncryptedDir(secureDir); err != nil {
+		return err
+	}
+	if err := ensureRamdiskMounted(insecureDir); err != nil {
+		return err
+	}
+
+	for _, portable := range config.ProtectedFiles {
+		fullPath, err := expandPortablePath(portable)
+		if err != nil {
+			return err
+		}
+		rel, err := relToHome(fullPath)
+		if err != nil {
+			return err
+		}
+		insecurePath := filepath.Join(insecureDir, rel)
+		securePath := filepath.Join(secureDir, rel)
+
+		if err := ensureParentDir(securePath); err != nil {
+			return err
+		}
+		if err := encryptFile(insecurePath, securePath, key); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
