@@ -55,6 +55,7 @@ func main() {
 
 	flag.Usage = usage
 	flag.Parse()
+	fmt.Fprintf(os.Stderr, "lokeys version %s\n", version)
 
 	ctx := context.Background()
 	os.Exit(int(subcommands.Execute(ctx)))
