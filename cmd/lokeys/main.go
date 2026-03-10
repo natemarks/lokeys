@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
@@ -10,6 +11,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -17,6 +19,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/google/subcommands"
 	"golang.org/x/term"
 )
 
@@ -34,46 +37,80 @@ const fileMagic = "LOKEYS1"
 
 var version = "dev"
 
-type Config struct {
+type config struct {
 	ProtectedFiles []string `json:"protectedFiles"`
 	Key            string   `json:"key"`
 }
 
 func main() {
-	if len(os.Args) < 2 {
-		usage()
-		os.Exit(2)
-	}
+	subcommands.Register(subcommands.HelpCommand(), "")
+	subcommands.Register(subcommands.FlagsCommand(), "")
+	subcommands.Register(subcommands.CommandsCommand(), "")
+	subcommands.Register(&listCommand{}, "")
+	subcommands.Register(&addCommand{}, "")
+	subcommands.Register(&sealCommand{}, "")
+	subcommands.Register(&unsealCommand{}, "")
 
-	sub := os.Args[1]
-	args := os.Args[2:]
+	flag.Usage = usage
+	flag.Parse()
 
-	switch sub {
-	case "list":
-		exitOnError(runList(args))
-	case "add":
-		exitOnError(runAdd(args))
-	case "seal":
-		exitOnError(runSeal(args))
-	case "unseal":
-		exitOnError(runUnseal(args))
-	case "help", "-h", "--help":
-		usage()
-	default:
-		fmt.Fprintf(os.Stderr, "Unknown command: %s\n", sub)
-		usage()
-		os.Exit(2)
-	}
+	ctx := context.Background()
+	os.Exit(int(subcommands.Execute(ctx)))
 }
 
 func usage() {
-	fmt.Printf("lokeys %s - manage protected files in RAM disk\n", version)
-	fmt.Println()
-	fmt.Println("Usage:")
-	fmt.Println("  lokeys list")
-	fmt.Println("  lokeys add <path>")
-	fmt.Println("  lokeys seal")
-	fmt.Println("  lokeys unseal")
+	fmt.Fprintf(os.Stderr, "lokeys %s - manage protected files in RAM disk\n\n", version)
+	if subcommands.DefaultCommander != nil && subcommands.DefaultCommander.Explain != nil {
+		subcommands.DefaultCommander.Explain(os.Stderr)
+	}
+}
+
+type listCommand struct{}
+
+func (*listCommand) Name() string     { return "list" }
+func (*listCommand) Synopsis() string { return "list protected files and integrity status" }
+func (*listCommand) Usage() string {
+	return "list\n\tList protected files and verify secure/insecure hashes.\n"
+}
+func (*listCommand) SetFlags(*flag.FlagSet) {}
+func (*listCommand) Execute(_ context.Context, f *flag.FlagSet, _ ...interface{}) subcommands.ExitStatus {
+	return runWithExitStatus(runList(f.Args()))
+}
+
+type addCommand struct{}
+
+func (*addCommand) Name() string     { return "add" }
+func (*addCommand) Synopsis() string { return "add a file to protected set" }
+func (*addCommand) Usage() string {
+	return "add <path>\n\tAdd file to protected set and replace with RAM-disk symlink.\n"
+}
+func (*addCommand) SetFlags(*flag.FlagSet) {}
+func (*addCommand) Execute(_ context.Context, f *flag.FlagSet, _ ...interface{}) subcommands.ExitStatus {
+	return runWithExitStatus(runAdd(f.Args()))
+}
+
+type sealCommand struct{}
+
+func (*sealCommand) Name() string     { return "seal" }
+func (*sealCommand) Synopsis() string { return "encrypt all protected RAM-disk files" }
+func (*sealCommand) Usage() string {
+	return "seal\n\tEncrypt all protected RAM-disk files into secure storage.\n"
+}
+func (*sealCommand) SetFlags(*flag.FlagSet) {}
+func (*sealCommand) Execute(_ context.Context, f *flag.FlagSet, _ ...interface{}) subcommands.ExitStatus {
+	return runWithExitStatus(runSeal(f.Args()))
+}
+
+type unsealCommand struct{}
+
+func (*unsealCommand) Name() string     { return "unseal" }
+func (*unsealCommand) Synopsis() string { return "decrypt all protected files to RAM disk" }
+func (*unsealCommand) Usage() string {
+	return "unseal\n\tDecrypt all protected files into RAM-disk storage.\n"
+}
+func (*unsealCommand) SetFlags(*flag.FlagSet) {}
+func (*unsealCommand) Execute(_ context.Context, f *flag.FlagSet, _ ...interface{}) subcommands.ExitStatus {
+	return runWithExitStatus(runUnseal(f.Args()))
 }
 
 func runList(args []string) error {
@@ -359,22 +396,21 @@ func usageError(message string) error {
 	return fmt.Errorf("%w: %s", errUsage, message)
 }
 
-func exitOnError(err error) {
+func runWithExitStatus(err error) subcommands.ExitStatus {
 	if err == nil {
-		return
+		return subcommands.ExitSuccess
 	}
 	if errors.Is(err, errUsage) {
 		fmt.Fprintln(os.Stderr, err.Error())
-		usage()
-		os.Exit(2)
+		return subcommands.ExitUsageError
 	}
 	fmt.Fprintln(os.Stderr, err.Error())
-	os.Exit(1)
+	return subcommands.ExitFailure
 }
 
 var errUsage = errors.New("usage error")
 
-func ensureConfig() (*Config, bool, error) {
+func ensureConfig() (*config, bool, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return nil, false, err
@@ -396,26 +432,26 @@ func ensureConfig() (*Config, bool, error) {
 	if err != nil {
 		return nil, false, err
 	}
-	cfg := &Config{ProtectedFiles: []string{}, Key: key}
+	cfg := &config{ProtectedFiles: []string{}, Key: key}
 	if err := writeConfigTo(path, cfg); err != nil {
 		return nil, false, err
 	}
 	return cfg, true, nil
 }
 
-func readConfig(path string) (*Config, error) {
+func readConfig(path string) (*config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
-	var cfg Config
+	var cfg config
 	if err := json.Unmarshal(data, &cfg); err != nil {
 		return nil, err
 	}
 	return &cfg, nil
 }
 
-func writeConfig(cfg *Config) error {
+func writeConfig(cfg *config) error {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return err
@@ -424,7 +460,7 @@ func writeConfig(cfg *Config) error {
 	return writeConfigTo(path, cfg)
 }
 
-func writeConfigTo(path string, cfg *Config) error {
+func writeConfigTo(path string, cfg *config) error {
 	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		return err
@@ -432,7 +468,7 @@ func writeConfigTo(path string, cfg *Config) error {
 	return os.WriteFile(path, data, configFilePerm)
 }
 
-func configKey(cfg *Config) ([]byte, error) {
+func configKey(cfg *config) ([]byte, error) {
 	if cfg.Key == "" {
 		key, err := randomKey()
 		if err != nil {

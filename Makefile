@@ -14,14 +14,14 @@ help: ## Show this help.
 GO_FILES := $(shell find . -name "*.go" -not -path "./vendor/*")
 SH_FILES := $(shell ls scripts/*.sh 2>/dev/null)
 
-.PHONY: static go-static bash-static gofmt-check go-vet golangci-lint go-test shfmt-check shellcheck build git-clean
+.PHONY: static go-static bash-static gofmt-check go-vet golint go-test shfmt-check shellcheck build git-clean
 
 static: go-static bash-static ## Run all static checks.
 
 build: git-clean ## Build lokeys with version.
 	go build -ldflags "-X main.version=$(COMMIT)" -o bin/lokeys ./cmd/lokeys
 
-go-static: gofmt-check go-vet golangci-lint go-test ## Run Go checks.
+go-static: gofmt-check go-vet golint go-test ## Run Go checks.
 
 bash-static: shfmt-check shellcheck ## Run Bash checks.
 
@@ -37,10 +37,11 @@ gofmt-check: ## Check Go formatting with gofmt.
 	fi
 
 go-vet: ## Run go vet on all packages.
-	go vet ./...
+	go vet ${GO_FILES}
 
-golangci-lint: ## Run golangci-lint.
-	golangci-lint run
+golint: ## Run golint.
+	go install golang.org/x/lint/golint@latest
+	golint ./...
 
 go-test: ## Run Go tests.
 	go test ./...
