@@ -1,3 +1,5 @@
 #!/usr/bin/env bash
-rm -f ~/.config/lokeys
+cp ~/.lokeys/insecure/jjj/jjj.txt ~/jjj/jjj.txt
+sudo umount "${HOME}/.lokeys/insecure"
+rm -f ~/.config/lokey
 rm -rf ~/.lokeys
