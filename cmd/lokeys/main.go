@@ -52,6 +52,17 @@ func main() {
 	subcommands.Register(&addCommand{}, "")
 	subcommands.Register(&sealCommand{}, "")
 	subcommands.Register(&unsealCommand{}, "")
+	if subcommands.DefaultCommander != nil {
+		defaultExplain := subcommands.DefaultCommander.Explain
+		subcommands.DefaultCommander.Explain = func(w io.Writer) {
+			if defaultExplain != nil {
+				defaultExplain(w)
+			}
+			fmt.Fprintln(w)
+			fmt.Fprintf(w, "Session key mode: pass --session to any data command (add/list/seal/unseal) to reuse %s.\n", sessionKeyEnv)
+			fmt.Fprintln(w, "Without --session, lokeys always prompts securely for the encryption key.")
+		}
+	}
 
 	flag.Usage = usage
 	flag.Parse()
