@@ -16,7 +16,7 @@ type sealCommand struct {
 func (*sealCommand) Name() string     { return "seal" }
 func (*sealCommand) Synopsis() string { return "encrypt all protected RAM-disk files" }
 func (*sealCommand) Usage() string {
-	return "seal\n\tEncrypt all protected RAM-disk files into secure storage.\n"
+	return "seal [--session]\n\tEncrypt all protected RAM-disk files into secure storage.\n\t--session reuses key from $LOKEYS_SESSION_KEY or prompts once and stores it for this process.\n"
 }
 func (c *sealCommand) SetFlags(fs *flag.FlagSet) {
 	fs.BoolVar(&c.session, "session", false, "reuse encryption key from $LOKEYS_SESSION_KEY for this process")

@@ -18,7 +18,7 @@ type listCommand struct {
 func (*listCommand) Name() string     { return "list" }
 func (*listCommand) Synopsis() string { return "list protected files and integrity status" }
 func (*listCommand) Usage() string {
-	return "list\n\tList protected files and verify secure/insecure hashes.\n"
+	return "list [--session]\n\tList protected files and verify secure/insecure hashes.\n\t--session reuses key from $LOKEYS_SESSION_KEY or prompts once and stores it for this process.\n"
 }
 func (c *listCommand) SetFlags(fs *flag.FlagSet) {
 	fs.BoolVar(&c.session, "session", false, "reuse encryption key from $LOKEYS_SESSION_KEY for this process")
