@@ -1,142 +1,139 @@
 # lokeys
 
-`lokeys` protects small sensitive files by:
+`lokeys` keeps small sensitive files encrypted at rest and only decrypted in RAM.
 
-- keeping decrypted copies in a tmpfs RAM disk at `~/.lokeys/insecure`
-- storing encrypted copies at `~/.lokeys/secure`
+It works by:
+- storing encrypted files in `~/.lokeys/secure`
+- mounting a tmpfs RAM disk at `~/.lokeys/insecure`
+- replacing original files with symlinks to the RAM-disk copies
 - tracking protected paths in `~/.config/lokeys`
 
-## Install
+When you reboot, the RAM-disk contents disappear automatically.
 
-Requirements:
+## Requirements
 
-- Go 1.25+
-- Linux with `tmpfs` mount support
-- `sudo` access for mounting tmpfs
+- Linux with `tmpfs`
+- `sudo` access (used to mount the RAM disk)
 
-Build locally:
+## Install (downloaded binary)
+
+Assume you downloaded an executable named `lokeys` from a release.
 
 ```bash
-go build -ldflags "-X main.version=$(git rev-parse HEAD)" -o ./bin/lokeys ./cmd/lokeys
+mkdir -p "$HOME/.local/bin"
+mv ./lokeys "$HOME/.local/bin/lokeys"
+chmod 0755 "$HOME/.local/bin/lokeys"
 ```
 
-Optional install to your Go bin path:
+Make sure `~/.local/bin` is on your `PATH`, then verify:
 
 ```bash
-go install ./cmd/lokeys
+lokeys version
+lokeys help
 ```
 
 ## Commands
 
-- `lokeys list` - list tracked files and integrity status
-- `lokeys add <path>` - add a file to protection, encrypt it, and replace original with symlink to RAM-disk copy
-- `lokeys remove <path>` - remove a file from protection and clean up managed copies
-- `lokeys seal` - encrypt all tracked RAM-disk files to secure storage
-- `lokeys unseal` - decrypt all tracked files into RAM disk and ensure symlinks point there
-- `lokeys backup` - create `<epoch>.tar` backup in `~/.lokeys/secure` containing secure files and `.config/lokeys`
-- `lokeys session-export` - prompt once and print an `export LOKEYS_SESSION_KEY=...` line for your shell
-- `lokeys version` - print the build/version string
-- `lokeys help` - show command help
+- `lokeys add <path>`: protect a file, encrypt it, and replace original with a symlink to RAM
+- `lokeys remove <path>`: unprotect a file and clean up managed copies
+- `lokeys list`: show tracked files and integrity status
+- `lokeys seal`: encrypt all tracked RAM-disk files back into secure storage
+- `lokeys unseal`: decrypt tracked files into RAM and ensure symlinks are in place
+- `lokeys backup`: create `~/.lokeys/secure/<epoch>.tar` backup
+- `lokeys session-export`: print `export LOKEYS_SESSION_KEY='...'` for your shell
+- `lokeys version`: print build/version string
+- `lokeys help`: show usage and subcommands
 
 ## Key handling
 
-- `lokeys` never stores encryption keys in config files.
-- You enter a passphrase (must be more than 16 characters).
-- The passphrase is deterministically encoded into a 32-byte AES key (SHA-256, base64-encoded for env storage).
-- If `LOKEYS_SESSION_KEY` is set, lokeys uses it as the encoded key value.
-- If `LOKEYS_SESSION_KEY` is not set, lokeys prompts securely for your passphrase.
+- `lokeys` never stores encryption keys in config.
+- You provide a passphrase (must be longer than 16 characters).
+- Passphrase is converted to a 32-byte key (SHA-256).
+- If `LOKEYS_SESSION_KEY` is set, lokeys uses it as the encoded key.
+- If `LOKEYS_SESSION_KEY` is not set, lokeys prompts securely.
 
-To persist session key across multiple commands in your current shell:
-
-```bash
-eval "$(./bin/lokeys session-export)"
-```
-
-Then run commands and it will not re-prompt while that env var remains set.
-
-## Fresh install round trip
-
-1) Build binary
+Load a key into your current shell session:
 
 ```bash
-go build -ldflags "-X main.version=$(git rev-parse HEAD)" -o ./bin/lokeys ./cmd/lokeys
+eval "$(lokeys session-export)"
 ```
 
-2) Initialize and inspect state
+After that, subsequent commands in that shell do not prompt for key input.
+
+## First-time round trip
+
+1. Initialize state
 
 ```bash
-./bin/lokeys list
+lokeys list
 ```
 
-This creates `~/.config/lokeys` and ensures storage directories exist.
+This creates `~/.config/lokeys` and lokeys directories if missing.
 
-3) Create a test secret file
+2. Create a test secret file
 
 ```bash
-mkdir -p ~/secrets
-printf 'api-token-123\n' > ~/secrets/demo.txt
-chmod 600 ~/secrets/demo.txt
+mkdir -p "$HOME/secrets"
+printf 'api-token-123\n' > "$HOME/secrets/demo.txt"
+chmod 0600 "$HOME/secrets/demo.txt"
 ```
 
-4) Add file to lokeys
+3. Protect it
 
 ```bash
-./bin/lokeys add ~/secrets/demo.txt
+lokeys add "$HOME/secrets/demo.txt"
 ```
 
-You will be prompted for:
-
+You may be prompted for:
 - encryption passphrase
-- sudo password (to mount tmpfs when needed)
+- sudo password (for mounting tmpfs)
 
-5) Verify status
-
-```bash
-./bin/lokeys list
-```
-
-You should see `OK` for the tracked file.
-`list` also prints a short legend for status values.
-
-6) Seal and unseal lifecycle
+4. Check status
 
 ```bash
-./bin/lokeys seal
-./bin/lokeys unseal
+lokeys list
 ```
 
-Optional: remove protection and restore managed symlinked file
+`list` prints a legend and status values:
+- `OK`: secure and insecure hashes match
+- `MISSING_INSECURE`: RAM copy missing
+- `MISSING_SECURE`: encrypted copy missing
+- `MISMATCH`: secure and insecure content differ
+
+5. Seal changes after edits
 
 ```bash
-./bin/lokeys remove ~/secrets/demo.txt
+lokeys seal
 ```
 
-7) Create a secure storage backup tarball
+6. Restore decrypted working set
 
 ```bash
-./bin/lokeys backup
+lokeys unseal
 ```
 
-This writes a file like `~/.lokeys/secure/1710076800.tar` and includes:
-
-- encrypted files from `~/.lokeys/secure` (excluding the tarball itself)
-- `.config/lokeys`
-
-8) Optional: avoid repeated key prompts in one shell session
+7. Create a backup tarball
 
 ```bash
-eval "$(./bin/lokeys session-export)"
-./bin/lokeys list
-./bin/lokeys seal
-./bin/lokeys unseal
+lokeys backup
 ```
 
-## Notes
+Backup includes:
+- contents of `~/.lokeys/secure` (excluding the backup tar itself)
+- `.config/lokeys` entry in the tar
 
-- `LOKEYS_SESSION_KEY` must contain an encoded 32-byte key.
-- If key validation fails against existing encrypted files, commands fail fast.
-- If tmpfs is mounted with wrong ownership, unmount and retry:
+8. Remove protection (optional)
 
 ```bash
-sudo umount ~/.lokeys/insecure
+lokeys remove "$HOME/secrets/demo.txt"
 ```
+
+## Troubleshooting
+
+- Wrong key in env var:
+  - unset it and retry: `unset LOKEYS_SESSION_KEY`
+- RAM-disk mount ownership problems:
+  - `sudo umount "$HOME/.lokeys/insecure"`
+  - rerun your command
+- Non-interactive terminal key prompt failure:
+  - export `LOKEYS_SESSION_KEY` first via `session-export`
