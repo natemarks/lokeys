@@ -155,17 +155,17 @@ func writeConfigTo(path string, cfg *config) error {
 func keyForCommand(session bool) ([]byte, error) {
 	if session {
 		if envKey, ok := os.LookupEnv(sessionKeyEnv); ok && strings.TrimSpace(envKey) != "" {
-			return parseKey(strings.TrimSpace(envKey))
+			return keyFromInput(strings.TrimSpace(envKey))
 		}
 	}
 
-	key, err := promptForKey()
+	key, encoded, err := promptForKey()
 	if err != nil {
 		return nil, err
 	}
 
 	if session {
-		if err := os.Setenv(sessionKeyEnv, base64.StdEncoding.EncodeToString(key)); err != nil {
+		if err := os.Setenv(sessionKeyEnv, encoded); err != nil {
 			return nil, fmt.Errorf("set %s: %w", sessionKeyEnv, err)
 		}
 	}
@@ -173,31 +173,51 @@ func keyForCommand(session bool) ([]byte, error) {
 	return key, nil
 }
 
-func promptForKey() ([]byte, error) {
+func promptForKey() ([]byte, string, error) {
 	if !term.IsTerminal(int(os.Stdin.Fd())) {
-		return nil, fmt.Errorf("encryption key required: run in a terminal")
+		return nil, "", fmt.Errorf("encryption key required: run in a terminal")
 	}
-	fmt.Fprint(os.Stderr, "encryption key (base64 32-byte): ")
+	fmt.Fprint(os.Stderr, "encryption key (>16 chars): ")
 	secret, err := term.ReadPassword(int(os.Stdin.Fd()))
 	fmt.Fprintln(os.Stderr)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
-	return parseKey(strings.TrimSpace(string(secret)))
+	return deriveKeyFromPassphrase(strings.TrimSpace(string(secret)))
 }
 
-func parseKey(raw string) ([]byte, error) {
+func keyFromInput(raw string) ([]byte, error) {
+	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return nil, fmt.Errorf("encryption key is empty")
 	}
+	if key, err := decodeEncodedKey(raw); err == nil {
+		return key, nil
+	}
+	key, _, err := deriveKeyFromPassphrase(raw)
+	return key, err
+}
+
+func decodeEncodedKey(raw string) ([]byte, error) {
 	key, err := base64.StdEncoding.DecodeString(raw)
 	if err != nil {
-		return nil, fmt.Errorf("invalid encryption key encoding: %w", err)
+		return nil, fmt.Errorf("invalid encoded session key: %w", err)
 	}
 	if len(key) != 32 {
-		return nil, fmt.Errorf("invalid encryption key length: got %d bytes, want 32", len(key))
+		return nil, fmt.Errorf("invalid encoded session key length: got %d bytes, want 32", len(key))
 	}
 	return key, nil
+}
+
+func deriveKeyFromPassphrase(raw string) ([]byte, string, error) {
+	if len(raw) <= 16 {
+		return nil, "", fmt.Errorf("encryption key must be more than 16 characters")
+	}
+	sum := sha256.Sum256([]byte(raw))
+	key := make([]byte, len(sum))
+	copy(key, sum[:])
+	encoded := base64.StdEncoding.EncodeToString(key)
+	return key, encoded, nil
 }
 
 func validateKeyForExistingProtectedFiles(cfg *config, key []byte) error {
