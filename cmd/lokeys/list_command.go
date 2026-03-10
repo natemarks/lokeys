@@ -65,16 +65,31 @@ func runList(args []string, session bool) error {
 		return nil
 	}
 
-	key, err := keyForCommand(session)
-	if err != nil {
-		return err
-	}
-	if err := validateKeyForExistingProtectedFiles(config, key); err != nil {
-		return err
+	needsKey := false
+	for _, portable := range config.ProtectedFiles {
+		fullPath, err := expandPortablePath(portable)
+		if err != nil {
+			return err
+		}
+		rel, err := relToHome(fullPath)
+		if err != nil {
+			return err
+		}
+		if fileExists(filepath.Join(secureDir, rel)) {
+			needsKey = true
+			break
+		}
 	}
 
-	if err := ensureRamdiskMounted(insecureDir); err != nil {
-		return err
+	var key []byte
+	if needsKey {
+		key, err = keyForCommand(session)
+		if err != nil {
+			return err
+		}
+		if err := validateKeyForExistingProtectedFiles(config, key); err != nil {
+			return err
+		}
 	}
 
 	for _, portable := range config.ProtectedFiles {
