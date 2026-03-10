@@ -89,12 +89,13 @@ func ensureConfig() (*config, bool, error) {
 		return nil, false, err
 	}
 	path := filepath.Join(home, configFileRel)
-	if _, err := os.Stat(path); err == nil {
+	_, statErr := os.Stat(path)
+	if statErr == nil {
 		cfg, err := readConfig(path)
 		return cfg, false, err
 	}
-	if !os.IsNotExist(err) {
-		return nil, false, err
+	if !os.IsNotExist(statErr) {
+		return nil, false, statErr
 	}
 
 	if err := os.MkdirAll(filepath.Dir(path), dirPerm); err != nil {
