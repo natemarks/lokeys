@@ -54,6 +54,7 @@ func main() {
 	subcommands.Register(&addCommand{}, "")
 	subcommands.Register(&sealCommand{}, "")
 	subcommands.Register(&unsealCommand{}, "")
+	subcommands.Register(&sessionExportCommand{}, "")
 	if subcommands.DefaultCommander != nil {
 		defaultExplain := subcommands.DefaultCommander.Explain
 		subcommands.DefaultCommander.Explain = func(w io.Writer) {
@@ -62,6 +63,7 @@ func main() {
 			}
 			fmt.Fprintln(w)
 			fmt.Fprintf(w, "Session key mode: pass --session to any data command (add/list/seal/unseal) to use encoded key in %s.\n", sessionKeyEnv)
+			fmt.Fprintln(w, "Use `lokeys session-export` to print an export command for your shell session.")
 			fmt.Fprintln(w, "Without --session, lokeys always prompts securely for the encryption key.")
 		}
 	}
