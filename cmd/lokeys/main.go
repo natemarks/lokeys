@@ -17,6 +17,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/google/subcommands"
@@ -184,7 +185,8 @@ func ensureRamdiskMounted(path string) error {
 	if err != nil {
 		return err
 	}
-	cmd := exec.Command("sudo", "-S", "mount", "-t", "tmpfs", "-o", fmt.Sprintf("size=%s,mode=%s", defaultRamdiskSize, defaultMountMode), "tmpfs", path)
+	mountOpts := fmt.Sprintf("size=%s,mode=%s,uid=%s,gid=%s", defaultRamdiskSize, defaultMountMode, strconv.Itoa(os.Getuid()), strconv.Itoa(os.Getgid()))
+	cmd := exec.Command("sudo", "-S", "mount", "-t", "tmpfs", "-o", mountOpts, "tmpfs", path)
 	cmd.Stdin = bytes.NewReader(append(pass, '\n'))
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
