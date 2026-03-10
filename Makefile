@@ -37,7 +37,8 @@ gofmt-check: ## Check Go formatting with gofmt.
 	fi
 
 go-vet: ## Run go vet on all packages.
-	go vet ${GO_FILES}
+	go install ./...
+	go vet ./...
 
 golint: ## Run golint.
 	go install golang.org/x/lint/golint@latest

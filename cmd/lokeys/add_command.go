@@ -3,11 +3,9 @@ package main
 import (
 	"context"
 	"flag"
-	"fmt"
-	"os"
-	"path/filepath"
 
 	"github.com/google/subcommands"
+	"lokeys/internal/lokeys"
 )
 
 type addCommand struct {
@@ -30,79 +28,5 @@ func runAdd(args []string, session bool) error {
 	if len(args) != 1 {
 		return usageError("add requires a single path")
 	}
-
-	input := args[0]
-	fullPath, err := expandUserPath(input)
-	if err != nil {
-		return err
-	}
-
-	config, _, err := ensureConfig()
-	if err != nil {
-		return err
-	}
-	key, err := keyForCommand(session)
-	if err != nil {
-		return err
-	}
-	if err := validateKeyForExistingProtectedFiles(config, key); err != nil {
-		return err
-	}
-
-	portable, err := portablePath(fullPath)
-	if err != nil {
-		return err
-	}
-
-	if containsString(config.ProtectedFiles, portable) {
-		fmt.Printf("%s already protected.\n", portable)
-		return nil
-	}
-
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return err
-	}
-	secureDir := filepath.Join(home, defaultEncryptedRel)
-	insecureDir := filepath.Join(home, defaultDecryptedRel)
-
-	if err := ensureEncryptedDir(secureDir); err != nil {
-		return err
-	}
-	if err := ensureRamdiskMounted(insecureDir); err != nil {
-		return err
-	}
-
-	if err := ensureRegularFile(fullPath); err != nil {
-		return err
-	}
-
-	rel, err := relToHome(fullPath)
-	if err != nil {
-		return err
-	}
-
-	securePath := filepath.Join(secureDir, rel)
-	insecurePath := filepath.Join(insecureDir, rel)
-
-	if err := ensureParentDir(insecurePath); err != nil {
-		return err
-	}
-	if err := ensureParentDir(securePath); err != nil {
-		return err
-	}
-
-	if err := copyFile(fullPath, insecurePath, 0600); err != nil {
-		return err
-	}
-	if err := encryptFile(insecurePath, securePath, key); err != nil {
-		return err
-	}
-
-	if err := replaceWithSymlink(fullPath, insecurePath); err != nil {
-		return err
-	}
-
-	config.ProtectedFiles = append(config.ProtectedFiles, portable)
-	return writeConfig(config)
+	return lokeys.RunAdd(args[0], session)
 }

@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/google/subcommands"
+	"lokeys/internal/lokeys"
 )
 
 type sessionExportCommand struct{}
@@ -21,11 +22,11 @@ func (*sessionExportCommand) Execute(_ context.Context, f *flag.FlagSet, _ ...in
 		return runWithExitStatus(usageError("session-export takes no arguments"))
 	}
 
-	_, encoded, err := promptForKey()
+	exportLine, err := lokeys.RunSessionExport()
 	if err != nil {
 		return runWithExitStatus(err)
 	}
 
-	fmt.Printf("export %s='%s'\n", sessionKeyEnv, encoded)
+	fmt.Println(exportLine)
 	return subcommands.ExitSuccess
 }

@@ -1,7 +1,6 @@
-package main
+package lokeys
 
 import (
-	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,7 +14,7 @@ func TestRunListFailsFastWithWrongSessionKey(t *testing.T) {
 	fullPath := filepath.Join(home, "jjj", "jjj.txt")
 	rel, err := relToHome(fullPath)
 	if err != nil {
-		t.Fatalf("relToHome: %v", err)
+		t.Fatalf("RelToHome: %v", err)
 	}
 
 	securePath := filepath.Join(home, defaultEncryptedRel, rel)
@@ -44,15 +43,12 @@ func TestRunListFailsFastWithWrongSessionKey(t *testing.T) {
 		t.Fatalf("write config: %v", err)
 	}
 
-	t.Setenv(sessionKeyEnv, "this-is-definitely-the-wrong-key")
-	err = runList([]string{}, true)
+	t.Setenv(SessionKeyEnv, "this-is-definitely-the-wrong-key")
+	err = RunList(true)
 	if err == nil {
 		t.Fatalf("expected error with wrong key")
 	}
 	if !strings.Contains(err.Error(), "must contain an encoded 32-byte key") {
 		t.Fatalf("expected encoded session key error, got: %v", err)
-	}
-	if errors.Is(err, errUsage) {
-		t.Fatalf("expected runtime failure, got usage error: %v", err)
 	}
 }
