@@ -36,7 +36,7 @@ func runKMSRotate(args []string, targetKeyID string, region string, profile stri
 		return err
 	}
 	if targetKeyID == "" {
-		return usageError("kms-rotate requires --target-key-id")
+		return usageError("kms-rotate requires --target-key-id (example: --target-key-id alias/lokeys-next)")
 	}
 	backupPath, rotated, err := lokeys.RunKMSRotate(lokeys.KMSRotateOptions{TargetKeyID: targetKeyID, Region: region, Profile: profile})
 	if err != nil {

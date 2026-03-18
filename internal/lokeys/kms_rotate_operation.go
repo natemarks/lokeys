@@ -28,7 +28,7 @@ func (s *Service) RunKMSRotate(opts KMSRotateOptions) (string, int, error) {
 	}
 	currentKMSCfg, enabled := cfg.kmsRuntimeConfig()
 	if !enabled {
-		return "", 0, fmt.Errorf("kms rotate requires kms to be enabled in config")
+		return "", 0, fmt.Errorf("kms-rotate requires KMS to be enabled in config; run `lokeys enable-kms --apply` first")
 	}
 	targetKeyID := strings.TrimSpace(opts.TargetKeyID)
 	if targetKeyID == "" {
@@ -144,7 +144,7 @@ func buildKMSRotationPlans(cfg *config, paths appPaths, key []byte, sourceProfil
 		}
 		if !fileExists(tracked.SecurePath) {
 			if !fileExists(tracked.InsecurePath) {
-				return nil, skipped, fmt.Errorf("cannot kms-rotate %s: neither secure nor RAM-disk copy exists", portable)
+				return nil, skipped, fmt.Errorf("cannot kms-rotate %s: neither secure nor RAM-disk copy exists; run `lokeys list` to inspect state, then restore from backup or remove stale entry with `lokeys remove %q`", portable, tracked.HomePath)
 			}
 			if err := ensureParentDir(tracked.SecurePath); err != nil {
 				return nil, skipped, fmt.Errorf("ensure secure parent dir: %w", err)

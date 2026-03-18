@@ -202,7 +202,7 @@ func collectUntrackedRamdiskFiles(paths appPaths, trackedRels map[string]struct{
 		}
 		homePath := homePathFromInsecureRel(paths.Home, rel)
 		if fileExists(homePath) {
-			return fmt.Errorf("refusing to seal RAM-disk file %s: %s already exists", path, homePath)
+			return fmt.Errorf("refusing to seal RAM-disk file %s: %s already exists; remove or move the existing home path and retry (example: rm %q)", path, homePath, homePath)
 		}
 		portable, err := portablePath(homePath)
 		if err != nil {

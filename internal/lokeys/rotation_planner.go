@@ -44,7 +44,7 @@ func buildRotationPlans(cfg *config, paths appPaths, oldKey []byte, newKey []byt
 		}
 
 		if !fileExists(tracked.SecurePath) && !fileExists(tracked.InsecurePath) {
-			return nil, fmt.Errorf("cannot rotate %s: neither secure nor RAM-disk copy exists", portable)
+			return nil, fmt.Errorf("cannot rotate %s: neither secure nor RAM-disk copy exists; run `lokeys list` to inspect state, then restore from backup or remove stale entry with `lokeys remove %q`", portable, tracked.HomePath)
 		}
 
 		if err := ensureParentDir(tracked.SecurePath); err != nil {

@@ -35,7 +35,7 @@ func (s *Service) RunEnableKMS(opts EnableKMSOptions) (string, error) {
 		alias = "alias/lokeys"
 	}
 	if !strings.HasPrefix(alias, "alias/") {
-		return "", fmt.Errorf("kms alias must start with alias/")
+		return "", fmt.Errorf("kms alias must start with alias/ (example: --alias alias/lokeys)")
 	}
 
 	client, resolvedRegion, resolvedProfile, err := newKMSClient(strings.TrimSpace(opts.Region), strings.TrimSpace(opts.Profile))

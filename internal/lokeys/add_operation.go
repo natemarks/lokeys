@@ -1,6 +1,9 @@
 package lokeys
 
-import "fmt"
+import (
+	"fmt"
+	"os"
+)
 
 // AddOptions controls optional behavior for add operations.
 type AddOptions struct {
@@ -64,7 +67,7 @@ func (s *Service) RunAddWithOptions(pathArg string, opts AddOptions) error {
 		return nil
 	}
 	if fromInsecure && fileExists(tracked.HomePath) {
-		return fmt.Errorf("cannot protect RAM-disk file %s: %s already exists", fullPath, tracked.HomePath)
+		return fmt.Errorf("cannot protect RAM-disk file %s: %s", fullPath, ramdiskAddConflictHint(tracked.HomePath, tracked.InsecurePath))
 	}
 	if opts.AllowKMSBypass && !isAWSCredentialPortablePath(tracked.Portable) {
 		return fmt.Errorf("--allow-kms-bypass is only valid for files under $HOME/.aws")
@@ -139,4 +142,26 @@ func trackFileForAdd(paths appPaths, fullPath string) (trackedFile, bool, error)
 		return trackedFile{}, false, err
 	}
 	return trackedHome, false, nil
+}
+
+func ramdiskAddConflictHint(homePath string, insecurePath string) string {
+	removeHint := fmt.Sprintf("remove this path and retry: rm %q", homePath)
+	info, err := os.Lstat(homePath)
+	if err != nil {
+		return fmt.Sprintf("%s already exists; %s", homePath, removeHint)
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		target, err := os.Readlink(homePath)
+		if err != nil {
+			return fmt.Sprintf("%s already exists as a symlink; %s", homePath, removeHint)
+		}
+		if target == insecurePath {
+			return fmt.Sprintf("%s already exists as symlink to %s; %s", homePath, insecurePath, removeHint)
+		}
+		return fmt.Sprintf("%s already exists as symlink to %s; %s", homePath, target, removeHint)
+	}
+	if info.Mode().IsRegular() {
+		return fmt.Sprintf("%s already exists as a regular file; back it up if needed, then %s", homePath, removeHint)
+	}
+	return fmt.Sprintf("%s already exists; %s", homePath, removeHint)
 }

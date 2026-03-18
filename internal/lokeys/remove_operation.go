@@ -114,7 +114,7 @@ func (s *Service) restoreIfManagedSymlink(fullPath string, insecurePath string, 
 			return err
 		}
 	} else {
-		return fmt.Errorf("cannot restore %s: neither insecure nor secure copy exists", fullPath)
+		return fmt.Errorf("cannot restore %s: neither insecure nor secure copy exists; recover with `lokeys restore` (or `lokeys restore <archive.tar.gz>`), then retry remove", fullPath)
 	}
 
 	if err := removePath(fullPath, false); err != nil {

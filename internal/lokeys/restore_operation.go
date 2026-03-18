@@ -54,10 +54,10 @@ func resolveRestoreArchive(paths appPaths, archiveArg string) (string, error) {
 		candidate = filepath.Join(paths.SecureDir, candidate)
 	}
 	if filepath.Ext(candidate) != ".gz" || !strings.HasSuffix(candidate, ".tar.gz") {
-		return "", fmt.Errorf("restore archive must be a .tar.gz file: %s", candidate)
+		return "", fmt.Errorf("restore archive must be a .tar.gz file: %s; use `lokeys restore` for latest archive or pass an explicit .tar.gz path", candidate)
 	}
 	if _, err := os.Stat(candidate); err != nil {
-		return "", fmt.Errorf("restore archive not found: %s", candidate)
+		return "", fmt.Errorf("restore archive not found: %s; place backup under %s or pass an absolute archive path", candidate, paths.SecureDir)
 	}
 	return candidate, nil
 }
