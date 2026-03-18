@@ -67,6 +67,7 @@ func validateKeyForExistingProtectedFiles(cfg *config, key []byte) error {
 		return err
 	}
 	secureDir := filepath.Join(home, defaultEncryptedRel)
+	kmsCfg, _ := cfg.kmsRuntimeConfig()
 
 	for _, portable := range cfg.ProtectedFiles {
 		fullPath, err := expandPortablePath(portable)
@@ -85,7 +86,7 @@ func validateKeyForExistingProtectedFiles(cfg *config, key []byte) error {
 		if err != nil {
 			return err
 		}
-		if _, err := decryptBytes(ciphertext, key); err != nil {
+		if _, err := decryptBytesWithProfile(ciphertext, key, kmsCfg.Profile); err != nil {
 			if isKMSError(err) {
 				return err
 			}

@@ -304,6 +304,10 @@ lokeys list
 These workflows apply only after KMS is explicitly enabled. They add a KMS CMK
 envelope layer for non-bypassed files.
 
+When you enable KMS, lokeys saves both the AWS profile and region used for KMS
+access into config. On KMS access errors, lokeys includes both profile and
+region in the error.
+
 ### Story 1: Enable KMS and protect `~/.aws/credentials` and `~/.ssh/id_rsa`
 
 Assumption: your AWS CLI is already working and authenticated.
@@ -324,6 +328,12 @@ lokeys enable-kms
 
 ```bash
 lokeys enable-kms --apply
+```
+
+If you need a specific AWS profile:
+
+```bash
+lokeys enable-kms --profile default --apply
 ```
 
 3. Protect AWS credentials with explicit per-file bypass:
@@ -386,6 +396,12 @@ lokeys kms-rotate --target-key-id alias/lokeys-next
 
 ```bash
 lokeys kms-rotate --target-key-id arn:aws:kms:us-east-1:123456789012:key/abcd-1234 --region us-east-1
+```
+
+If needed, also pin profile for the rotation call:
+
+```bash
+lokeys kms-rotate --target-key-id alias/lokeys-next --profile default
 ```
 
 **What lokeys does in the background**

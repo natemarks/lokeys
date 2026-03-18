@@ -12,6 +12,7 @@ import (
 type KMSRotateOptions struct {
 	TargetKeyID string
 	Region      string
+	Profile     string
 }
 
 // RunKMSRotate rotates KMS envelope encryption to a target CMK.
@@ -80,19 +81,24 @@ func (s *Service) RunKMSRotate(opts KMSRotateOptions) (string, int, error) {
 	if targetRegion == "" {
 		targetRegion = currentKMSCfg.Region
 	}
-	client, resolvedRegion, err := newKMSClient(targetRegion)
+	targetProfile := strings.TrimSpace(opts.Profile)
+	if targetProfile == "" {
+		targetProfile = currentKMSCfg.Profile
+	}
+	client, resolvedRegion, resolvedProfile, err := newKMSClient(targetRegion, targetProfile)
 	if err != nil {
 		return backupPath, 0, err
 	}
-	if err := validateKMSGenerateDataKey(client, targetKeyID); err != nil {
+	if err := validateKMSGenerateDataKey(client, targetKeyID, resolvedProfile, resolvedRegion); err != nil {
 		return backupPath, 0, err
 	}
 	targetKMSCfg := kmsRuntimeConfig{
 		KeyID:             targetKeyID,
 		Region:            resolvedRegion,
+		Profile:           resolvedProfile,
 		EncryptionContext: updatedCfg.KMS.EncryptionContext,
 	}
-	plans, skipped, err := buildKMSRotationPlans(updatedCfg, paths, oldKey, targetKMSCfg)
+	plans, skipped, err := buildKMSRotationPlans(updatedCfg, paths, oldKey, currentKMSCfg.Profile, targetKMSCfg)
 	if err != nil {
 		cleanupRotationTempFiles(plans)
 		return backupPath, 0, err
@@ -113,6 +119,7 @@ func (s *Service) RunKMSRotate(opts KMSRotateOptions) (string, int, error) {
 	newCfg.KMS.Enabled = true
 	newCfg.KMS.KeyID = targetKeyID
 	newCfg.KMS.Region = resolvedRegion
+	newCfg.KMS.Profile = resolvedProfile
 	if strings.HasPrefix(targetKeyID, "alias/") {
 		newCfg.KMS.Alias = targetKeyID
 	}
@@ -123,7 +130,7 @@ func (s *Service) RunKMSRotate(opts KMSRotateOptions) (string, int, error) {
 	return backupPath, rotated, nil
 }
 
-func buildKMSRotationPlans(cfg *config, paths appPaths, key []byte, targetKMSCfg kmsRuntimeConfig) ([]rotationPlan, int, error) {
+func buildKMSRotationPlans(cfg *config, paths appPaths, key []byte, sourceProfile string, targetKMSCfg kmsRuntimeConfig) ([]rotationPlan, int, error) {
 	plans := make([]rotationPlan, 0, len(cfg.ProtectedFiles))
 	skipped := 0
 	for _, portable := range cfg.ProtectedFiles {
@@ -151,7 +158,7 @@ func buildKMSRotationPlans(cfg *config, paths appPaths, key []byte, targetKMSCfg
 		if err != nil {
 			return nil, skipped, err
 		}
-		plaintext, err := decryptBytes(ciphertext, key)
+		plaintext, err := decryptBytesWithProfile(ciphertext, key, sourceProfile)
 		if err != nil {
 			return nil, skipped, fmt.Errorf("kms-rotate %s: %w", portable, err)
 		}
@@ -175,7 +182,7 @@ func buildKMSRotationPlans(cfg *config, paths appPaths, key []byte, targetKMSCfg
 			_ = os.Remove(tempPath)
 			return nil, skipped, err
 		}
-		if _, err := decryptBytes(rotatedCiphertext, key); err != nil {
+		if _, err := decryptBytesWithProfile(rotatedCiphertext, key, targetKMSCfg.Profile); err != nil {
 			_ = os.Remove(tempPath)
 			return nil, skipped, fmt.Errorf("verify kms-rotated file %s: %w", tracked.SecurePath, err)
 		}

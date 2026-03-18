@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
@@ -26,35 +28,57 @@ type kmsAPI interface {
 
 var loadAWSConfig = awsconfig.LoadDefaultConfig
 
-func newKMSClient(region string) (kmsAPI, string, error) {
-	vlogf("create kms client requested_region=%s", region)
+func newKMSClient(region string, profile string) (kmsAPI, string, string, error) {
+	resolvedProfile := resolveAWSProfile(profile)
+	vlogf("create kms client requested_region=%s profile=%s", region, resolvedProfile)
 	ctx := context.Background()
 	var cfg aws.Config
 	var err error
+	opts := []func(*awsconfig.LoadOptions) error{}
 	if region != "" {
-		cfg, err = loadAWSConfig(ctx, awsconfig.WithRegion(region))
-	} else {
-		cfg, err = loadAWSConfig(ctx)
+		opts = append(opts, awsconfig.WithRegion(region))
 	}
+	if strings.TrimSpace(profile) != "" {
+		opts = append(opts, awsconfig.WithSharedConfigProfile(strings.TrimSpace(profile)))
+	}
+	cfg, err = loadAWSConfig(ctx, opts...)
 	if err != nil {
-		return nil, "", fmt.Errorf("%w: load aws config: %v", ErrKMSOperation, err)
+		return nil, "", "", fmt.Errorf("%w: load aws config for profile %q region %q: %v", ErrKMSOperation, resolvedProfile, strings.TrimSpace(region), err)
 	}
 	resolvedRegion := cfg.Region
 	if resolvedRegion == "" {
-		return nil, "", fmt.Errorf("%w: aws region is not configured", ErrKMSOperation)
+		return nil, "", "", fmt.Errorf("%w: aws region is not configured for profile %q", ErrKMSOperation, resolvedProfile)
 	}
-	vlogf("created kms client resolved_region=%s", resolvedRegion)
+	vlogf("created kms client resolved_region=%s profile=%s", resolvedRegion, resolvedProfile)
 	client := kms.NewFromConfig(cfg)
-	return client, resolvedRegion, nil
+	return client, resolvedRegion, resolvedProfile, nil
 }
 
-func wrapKMSError(action string, err error) error {
+func wrapKMSError(action string, profile string, region string, err error) error {
 	if err == nil {
 		return nil
 	}
+	resolvedProfile := resolveAWSProfile(profile)
+	resolvedRegion := strings.TrimSpace(region)
+	if resolvedRegion == "" {
+		resolvedRegion = "(unspecified)"
+	}
+	vlogf("kms access error profile=%s region=%s action=%s err=%v", resolvedProfile, resolvedRegion, action, err)
 	var notFound *types.NotFoundException
 	if errors.As(err, &notFound) {
-		return fmt.Errorf("%w: %s: %s", ErrKMSOperation, action, notFound.ErrorMessage())
+		return fmt.Errorf("%w: profile %q region %q %s: %s", ErrKMSOperation, resolvedProfile, resolvedRegion, action, notFound.ErrorMessage())
 	}
-	return fmt.Errorf("%w: %s: %v", ErrKMSOperation, action, err)
+	return fmt.Errorf("%w: profile %q region %q %s: %v", ErrKMSOperation, resolvedProfile, resolvedRegion, action, err)
+}
+
+func resolveAWSProfile(profile string) string {
+	trimmed := strings.TrimSpace(profile)
+	if trimmed != "" {
+		return trimmed
+	}
+	envProfile := strings.TrimSpace(os.Getenv("AWS_PROFILE"))
+	if envProfile != "" {
+		return envProfile
+	}
+	return "default"
 }

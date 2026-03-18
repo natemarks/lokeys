@@ -8,6 +8,7 @@ import (
 type kmsRuntimeConfig struct {
 	KeyID             string
 	Region            string
+	Profile           string
 	EncryptionContext map[string]string
 }
 
@@ -25,6 +26,7 @@ func (c *config) kmsRuntimeConfig() (kmsRuntimeConfig, bool) {
 	return kmsRuntimeConfig{
 		KeyID:             strings.TrimSpace(c.KMS.KeyID),
 		Region:            strings.TrimSpace(c.KMS.Region),
+		Profile:           strings.TrimSpace(c.KMS.Profile),
 		EncryptionContext: ctxCopy,
 	}, true
 }

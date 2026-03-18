@@ -36,6 +36,7 @@ type kmsConfig struct {
 	Enabled           bool              `json:"enabled"`
 	KeyID             string            `json:"keyId,omitempty"`
 	Region            string            `json:"region,omitempty"`
+	Profile           string            `json:"profile,omitempty"`
 	Alias             string            `json:"alias,omitempty"`
 	EncryptionContext map[string]string `json:"encryptionContext,omitempty"`
 }

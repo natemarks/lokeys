@@ -64,6 +64,7 @@ func (s *Service) RunList() error {
 	}
 
 	var key []byte
+	kmsCfg, _ := config.kmsRuntimeConfig()
 	if needsKey {
 		key, err = s.deps.Keys.KeyForCommand()
 		if err != nil {
@@ -125,7 +126,7 @@ func (s *Service) RunList() error {
 			if err != nil {
 				return fmt.Errorf("read secure file %s: %w", tracked.SecurePath, err)
 			}
-			plaintext, err := decryptBytes(ciphertext, key)
+			plaintext, err := decryptBytesWithProfile(ciphertext, key, kmsCfg.Profile)
 			if err != nil {
 				return fmt.Errorf("decrypt secure file %s: %w", tracked.SecurePath, err)
 			}

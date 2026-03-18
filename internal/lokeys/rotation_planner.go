@@ -36,6 +36,7 @@ func sealTrackedFromRamdisk(cfg *config, paths appPaths, key []byte) error {
 
 func buildRotationPlans(cfg *config, paths appPaths, oldKey []byte, newKey []byte) ([]rotationPlan, error) {
 	plans := make([]rotationPlan, 0, len(cfg.ProtectedFiles))
+	kmsCfg, _ := cfg.kmsRuntimeConfig()
 	for _, portable := range cfg.ProtectedFiles {
 		tracked, err := buildTrackedFileFromPortable(paths.Home, paths.SecureDir, paths.InsecureDir, portable)
 		if err != nil {
@@ -59,14 +60,13 @@ func buildRotationPlans(cfg *config, paths appPaths, oldKey []byte, newKey []byt
 			return nil, err
 		}
 
-		plaintext, err := plaintextForRotation(tracked.InsecurePath, tracked.SecurePath, oldKey)
+		plaintext, err := plaintextForRotation(tracked.InsecurePath, tracked.SecurePath, oldKey, kmsCfg.Profile)
 		if err != nil {
 			_ = os.Remove(tempPath)
 			return nil, fmt.Errorf("rotate %s: %w", portable, err)
 		}
 
 		useKMS := shouldUseKMSForPortable(cfg, tracked.Portable)
-		kmsCfg, _ := cfg.kmsRuntimeConfig()
 		ciphertext, err := encryptBytesWithOptions(plaintext, newKey, useKMS, kmsCfg, rand.Reader)
 		if err != nil {
 			_ = os.Remove(tempPath)
@@ -76,7 +76,7 @@ func buildRotationPlans(cfg *config, paths appPaths, oldKey []byte, newKey []byt
 			_ = os.Remove(tempPath)
 			return nil, err
 		}
-		if err := verifyRotatedTempFile(tempPath, plaintext, newKey); err != nil {
+		if err := verifyRotatedTempFile(tempPath, plaintext, newKey, kmsCfg.Profile); err != nil {
 			_ = os.Remove(tempPath)
 			return nil, err
 		}
@@ -86,7 +86,7 @@ func buildRotationPlans(cfg *config, paths appPaths, oldKey []byte, newKey []byt
 	return plans, nil
 }
 
-func plaintextForRotation(insecurePath string, securePath string, oldKey []byte) ([]byte, error) {
+func plaintextForRotation(insecurePath string, securePath string, oldKey []byte, profile string) ([]byte, error) {
 	if fileExists(insecurePath) {
 		return os.ReadFile(insecurePath)
 	}
@@ -97,19 +97,19 @@ func plaintextForRotation(insecurePath string, securePath string, oldKey []byte)
 	if err != nil {
 		return nil, err
 	}
-	plaintext, err := decryptBytes(ciphertext, oldKey)
+	plaintext, err := decryptBytesWithProfile(ciphertext, oldKey, profile)
 	if err != nil {
 		return nil, err
 	}
 	return plaintext, nil
 }
 
-func verifyRotatedTempFile(tempPath string, expectedPlaintext []byte, newKey []byte) error {
+func verifyRotatedTempFile(tempPath string, expectedPlaintext []byte, newKey []byte, profile string) error {
 	tmpCiphertext, err := os.ReadFile(tempPath)
 	if err != nil {
 		return err
 	}
-	decrypted, err := decryptBytes(tmpCiphertext, newKey)
+	decrypted, err := decryptBytesWithProfile(tmpCiphertext, newKey, profile)
 	if err != nil {
 		return err
 	}

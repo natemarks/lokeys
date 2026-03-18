@@ -86,7 +86,7 @@ func encryptKMSWrapper(innerCiphertext []byte, kmsCfg kmsRuntimeConfig, random i
 	if kmsCfg.KeyID == "" {
 		return nil, fmt.Errorf("%w: kms key id is required", ErrKMSOperation)
 	}
-	client, resolvedRegion, err := newKMSClient(kmsCfg.Region)
+	client, resolvedRegion, resolvedProfile, err := newKMSClient(kmsCfg.Region, kmsCfg.Profile)
 	if err != nil {
 		return nil, err
 	}
@@ -97,7 +97,7 @@ func encryptKMSWrapper(innerCiphertext []byte, kmsCfg kmsRuntimeConfig, random i
 		EncryptionContext: kmsCfg.EncryptionContext,
 	})
 	if err != nil {
-		return nil, wrapKMSError("generate data key", err)
+		return nil, wrapKMSError("generate data key", resolvedProfile, resolvedRegion, err)
 	}
 	if len(resp.Plaintext) != 32 || len(resp.CiphertextBlob) == 0 {
 		return nil, fmt.Errorf("%w: unexpected GenerateDataKey response", ErrKMSOperation)
@@ -153,12 +153,16 @@ func encryptKMSWrapper(innerCiphertext []byte, kmsCfg kmsRuntimeConfig, random i
 }
 
 func decryptBytes(ciphertext []byte, secret []byte) ([]byte, error) {
+	return decryptBytesWithProfile(ciphertext, secret, "")
+}
+
+func decryptBytesWithProfile(ciphertext []byte, secret []byte, profile string) ([]byte, error) {
 	if len(ciphertext) < len(fileMagicV1) {
 		return nil, fmt.Errorf("ciphertext too short")
 	}
 	magic := string(ciphertext[:len(fileMagicV1)])
 	if magic == fileMagicV3 {
-		return decryptBytesV3(ciphertext[len(fileMagicV3):], secret)
+		return decryptBytesV3(ciphertext[len(fileMagicV3):], secret, profile)
 	}
 	if magic == fileMagicV2 {
 		return decryptBytesV2(ciphertext[len(fileMagicV2):], secret)
@@ -236,7 +240,7 @@ func decryptBytesV2(ciphertext []byte, secret []byte) ([]byte, error) {
 	return gcm.Open(nil, nonce, enc, nil)
 }
 
-func decryptBytesV3(ciphertext []byte, secret []byte) ([]byte, error) {
+func decryptBytesV3(ciphertext []byte, secret []byte, profile string) ([]byte, error) {
 	if len(ciphertext) < 1+1+2+2+1 {
 		return nil, fmt.Errorf("ciphertext too short")
 	}
@@ -285,7 +289,7 @@ func decryptBytesV3(ciphertext []byte, secret []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	client, _, err := newKMSClient(region)
+	client, _, resolvedProfile, err := newKMSClient(region, profile)
 	if err != nil {
 		return nil, err
 	}
@@ -299,7 +303,7 @@ func decryptBytesV3(ciphertext []byte, secret []byte) ([]byte, error) {
 	}
 	resp, err := client.Decrypt(context.Background(), decryptInput)
 	if err != nil {
-		return nil, wrapKMSError("decrypt data key", err)
+		return nil, wrapKMSError("decrypt data key", resolvedProfile, region, err)
 	}
 	if len(resp.Plaintext) != 32 {
 		return nil, fmt.Errorf("%w: unexpected Decrypt response", ErrKMSOperation)
@@ -348,13 +352,13 @@ func encryptFile(src, dst string, key []byte, useKMS bool, kmsCfg kmsRuntimeConf
 	return os.WriteFile(dst, ciphertext, 0600)
 }
 
-func decryptFile(src, dst string, key []byte, _ bool, _ kmsRuntimeConfig) error {
+func decryptFile(src, dst string, key []byte, _ bool, kmsCfg kmsRuntimeConfig) error {
 	vlogf("decrypt file src=%s dst=%s", src, dst)
 	ciphertext, err := os.ReadFile(src)
 	if err != nil {
 		return err
 	}
-	plaintext, err := decryptBytes(ciphertext, key)
+	plaintext, err := decryptBytesWithProfile(ciphertext, key, kmsCfg.Profile)
 	if err != nil {
 		return err
 	}

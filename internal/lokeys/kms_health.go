@@ -11,14 +11,14 @@ func ensureKMSReady(cfg *config) error {
 	if !enabled {
 		return nil
 	}
-	vlogf("kms health check key_id=%s region=%s", kmsCfg.KeyID, kmsCfg.Region)
-	client, _, err := newKMSClient(kmsCfg.Region)
+	vlogf("kms health check key_id=%s region=%s profile=%s", kmsCfg.KeyID, kmsCfg.Region, resolveAWSProfile(kmsCfg.Profile))
+	client, _, profile, err := newKMSClient(kmsCfg.Region, kmsCfg.Profile)
 	if err != nil {
 		return err
 	}
 	_, err = client.DescribeKey(context.Background(), &kms.DescribeKeyInput{KeyId: &kmsCfg.KeyID})
 	if err != nil {
-		return wrapKMSError("describe key", err)
+		return wrapKMSError("describe key", profile, kmsCfg.Region, err)
 	}
 	return nil
 }
