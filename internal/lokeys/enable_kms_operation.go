@@ -1,0 +1,138 @@
+package lokeys
+
+import (
+	"context"
+	"fmt"
+	"strings"
+
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/kms"
+	kmstypes "github.com/aws/aws-sdk-go-v2/service/kms/types"
+)
+
+// EnableKMSOptions controls KMS bootstrap and validation behavior.
+type EnableKMSOptions struct {
+	Alias  string
+	Region string
+	Apply  bool
+}
+
+// RunEnableKMS validates or bootstraps AWS KMS envelope settings.
+func RunEnableKMS(opts EnableKMSOptions) (string, error) {
+	return defaultService().RunEnableKMS(opts)
+}
+
+// RunEnableKMS validates or bootstraps AWS KMS envelope settings.
+func (s *Service) RunEnableKMS(opts EnableKMSOptions) (string, error) {
+	cfg, _, err := ensureConfig()
+	if err != nil {
+		return "", fmt.Errorf("ensure config: %w", err)
+	}
+	alias := strings.TrimSpace(opts.Alias)
+	if alias == "" {
+		alias = "alias/lokeys"
+	}
+	if !strings.HasPrefix(alias, "alias/") {
+		return "", fmt.Errorf("kms alias must start with alias/")
+	}
+
+	client, resolvedRegion, err := newKMSClient(strings.TrimSpace(opts.Region))
+	if err != nil {
+		return "", err
+	}
+	targetKeyID, err := findAliasTargetKeyID(client, alias)
+	if err != nil {
+		return "", err
+	}
+
+	action := "validated existing"
+	if targetKeyID == "" {
+		action = "would create"
+		if opts.Apply {
+			createResp, err := client.CreateKey(context.Background(), &kms.CreateKeyInput{
+				Description: aws.String("lokeys envelope encryption key"),
+				KeyUsage:    kmstypes.KeyUsageTypeEncryptDecrypt,
+				KeySpec:     kmstypes.KeySpecSymmetricDefault,
+			})
+			if err != nil {
+				return "", wrapKMSError("create key", err)
+			}
+			if createResp.KeyMetadata == nil || createResp.KeyMetadata.KeyId == nil {
+				return "", fmt.Errorf("%w: create key returned empty key metadata", ErrKMSOperation)
+			}
+			targetKeyID = *createResp.KeyMetadata.KeyId
+			if _, err := client.EnableKeyRotation(context.Background(), &kms.EnableKeyRotationInput{KeyId: &targetKeyID}); err != nil {
+				return "", wrapKMSError("enable key rotation", err)
+			}
+			if _, err := client.CreateAlias(context.Background(), &kms.CreateAliasInput{AliasName: &alias, TargetKeyId: &targetKeyID}); err != nil {
+				return "", wrapKMSError("create alias", err)
+			}
+			action = "created"
+		}
+	}
+
+	if opts.Apply {
+		if err := validateKMSGenerateDataKey(client, alias); err != nil {
+			return "", err
+		}
+		updated := &config{ProtectedFiles: append([]string{}, cfg.ProtectedFiles...), KMSBypassFiles: append([]string{}, cfg.KMSBypassFiles...)}
+		updated.KMS = &kmsConfig{
+			Enabled:           true,
+			KeyID:             alias,
+			Region:            resolvedRegion,
+			Alias:             alias,
+			EncryptionContext: map[string]string{"app": "lokeys"},
+		}
+		if err := writeConfig(updated); err != nil {
+			return "", fmt.Errorf("write config: %w", err)
+		}
+		return fmt.Sprintf("KMS %s key alias %s in region %s and updated config", action, alias, resolvedRegion), nil
+	}
+
+	if targetKeyID == "" {
+		return fmt.Sprintf("Dry run: %s CMK with alias %s in region %s; rerun with --apply to proceed", action, alias, resolvedRegion), nil
+	}
+	if err := validateKMSGenerateDataKey(client, alias); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("Dry run: validated KMS alias %s in region %s; rerun with --apply to write config", alias, resolvedRegion), nil
+}
+
+func findAliasTargetKeyID(client kmsAPI, alias string) (string, error) {
+	var marker *string
+	for {
+		resp, err := client.ListAliases(context.Background(), &kms.ListAliasesInput{Marker: marker, Limit: aws.Int32(100)})
+		if err != nil {
+			return "", wrapKMSError("list aliases", err)
+		}
+		for _, a := range resp.Aliases {
+			if a.AliasName == nil || *a.AliasName != alias {
+				continue
+			}
+			if a.TargetKeyId == nil {
+				return "", nil
+			}
+			return *a.TargetKeyId, nil
+		}
+		if !resp.Truncated || resp.NextMarker == nil {
+			break
+		}
+		marker = resp.NextMarker
+	}
+	return "", nil
+}
+
+func validateKMSGenerateDataKey(client kmsAPI, keyID string) error {
+	if _, err := client.DescribeKey(context.Background(), &kms.DescribeKeyInput{KeyId: &keyID}); err != nil {
+		return wrapKMSError("describe key", err)
+	}
+	resp, err := client.GenerateDataKey(context.Background(), &kms.GenerateDataKeyInput{KeyId: &keyID, KeySpec: kmstypes.DataKeySpecAes256, EncryptionContext: map[string]string{"app": "lokeys"}})
+	if err != nil {
+		return wrapKMSError("generate data key", err)
+	}
+	zeroBytes(resp.Plaintext)
+	if len(resp.CiphertextBlob) == 0 {
+		return fmt.Errorf("%w: empty ciphertext blob from GenerateDataKey", ErrKMSOperation)
+	}
+	return nil
+}

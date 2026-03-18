@@ -71,6 +71,11 @@ func (s *Service) RunList() error {
 		if err := validateKeyForExistingProtectedFiles(config, key); err != nil {
 			return err
 		}
+		if anyPortableRequiresKMS(config, config.ProtectedFiles) {
+			if err := ensureKMSReady(config); err != nil {
+				return err
+			}
+		}
 	}
 
 	if err := s.deps.Mounter.EnsureMounted(paths.InsecureDir); err != nil {

@@ -59,6 +59,17 @@ func (s *Service) RunRemove(pathArg string) error {
 func planRemove(cfg *config, idx int, tracked trackedFile) plan {
 	updated := &config{ProtectedFiles: append([]string{}, cfg.ProtectedFiles...)}
 	updated.ProtectedFiles = append(updated.ProtectedFiles[:idx], updated.ProtectedFiles[idx+1:]...)
+	updated.KMSBypassFiles = make([]string, 0, len(cfg.KMSBypassFiles))
+	for _, p := range cfg.KMSBypassFiles {
+		if p == tracked.Portable {
+			continue
+		}
+		updated.KMSBypassFiles = append(updated.KMSBypassFiles, p)
+	}
+	if cfg.KMS != nil {
+		kms := *cfg.KMS
+		updated.KMS = &kms
+	}
 
 	return plan{Actions: []action{
 		{Kind: actionRestoreManagedLink, HomePath: tracked.HomePath, InsecurePath: tracked.InsecurePath, SecurePath: tracked.SecurePath},
@@ -97,7 +108,7 @@ func (s *Service) restoreIfManagedSymlink(fullPath string, insecurePath string, 
 		if err != nil {
 			return err
 		}
-		if err := decryptFile(securePath, tmpOut, key); err != nil {
+		if err := decryptFile(securePath, tmpOut, key, false, kmsRuntimeConfig{}); err != nil {
 			return err
 		}
 	} else {

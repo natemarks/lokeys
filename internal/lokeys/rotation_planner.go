@@ -1,6 +1,7 @@
 package lokeys
 
 import (
+	"crypto/rand"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -24,7 +25,9 @@ func sealTrackedFromRamdisk(cfg *config, paths appPaths, key []byte) error {
 		if err := ensureParentDir(tracked.SecurePath); err != nil {
 			return fmt.Errorf("ensure secure parent dir: %w", err)
 		}
-		if err := encryptFile(tracked.InsecurePath, tracked.SecurePath, key); err != nil {
+		useKMS := shouldUseKMSForPortable(cfg, tracked.Portable)
+		kmsCfg, _ := cfg.kmsRuntimeConfig()
+		if err := encryptFile(tracked.InsecurePath, tracked.SecurePath, key, useKMS, kmsCfg); err != nil {
 			return fmt.Errorf("encrypt tracked file %s: %w", tracked.InsecurePath, err)
 		}
 	}
@@ -62,7 +65,9 @@ func buildRotationPlans(cfg *config, paths appPaths, oldKey []byte, newKey []byt
 			return nil, fmt.Errorf("rotate %s: %w", portable, err)
 		}
 
-		ciphertext, err := encryptBytes(plaintext, newKey)
+		useKMS := shouldUseKMSForPortable(cfg, tracked.Portable)
+		kmsCfg, _ := cfg.kmsRuntimeConfig()
+		ciphertext, err := encryptBytesWithOptions(plaintext, newKey, useKMS, kmsCfg, rand.Reader)
 		if err != nil {
 			_ = os.Remove(tempPath)
 			return nil, err

@@ -12,6 +12,7 @@ const (
 	SessionKeyEnv       = "LOKEYS_SESSION_KEY"
 	fileMagicV1         = "LOKEYS1"
 	fileMagicV2         = "LOKEYS2"
+	fileMagicV3         = "LOKEYS3"
 	configFilePerm      = os.FileMode(0600)
 	dirPerm             = os.FileMode(0700)
 )
@@ -26,5 +27,15 @@ const (
 )
 
 type config struct {
-	ProtectedFiles []string `json:"protectedFiles"`
+	ProtectedFiles []string   `json:"protectedFiles"`
+	KMS            *kmsConfig `json:"kms,omitempty"`
+	KMSBypassFiles []string   `json:"kmsBypassFiles,omitempty"`
+}
+
+type kmsConfig struct {
+	Enabled           bool              `json:"enabled"`
+	KeyID             string            `json:"keyId,omitempty"`
+	Region            string            `json:"region,omitempty"`
+	Alias             string            `json:"alias,omitempty"`
+	EncryptionContext map[string]string `json:"encryptionContext,omitempty"`
 }

@@ -24,10 +24,15 @@ func (s *Service) RunBackup() (string, error) {
 	if err := validateKeyForExistingProtectedFiles(cfg, key); err != nil {
 		return "", err
 	}
+	if anyPortableRequiresKMS(cfg, cfg.ProtectedFiles) {
+		if err := ensureKMSReady(cfg); err != nil {
+			return "", err
+		}
+	}
 	if err := s.deps.Mounter.EnsureMounted(paths.InsecureDir); err != nil {
 		return "", fmt.Errorf("ensure ramdisk mounted: %w", err)
 	}
-	if _, err := s.sealTrackedAndDiscovered(cfg, paths, key); err != nil {
+	if _, err := s.sealTrackedAndDiscovered(cfg, paths, key, SealOptions{}); err != nil {
 		return "", err
 	}
 	return s.createBackupSnapshot(paths)

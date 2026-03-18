@@ -2,13 +2,28 @@ package lokeys
 
 import "fmt"
 
+// AddOptions controls optional behavior for add operations.
+type AddOptions struct {
+	AllowKMSBypass bool
+}
+
 // RunAdd adds a file to protection and replaces it with a RAM-disk symlink.
 func RunAdd(pathArg string) error {
 	return defaultService().RunAdd(pathArg)
 }
 
+// RunAddWithOptions adds a file to protection and replaces it with a RAM-disk symlink.
+func RunAddWithOptions(pathArg string, opts AddOptions) error {
+	return defaultService().RunAddWithOptions(pathArg, opts)
+}
+
 // RunAdd adds a file to protection and replaces it with a RAM-disk symlink.
 func (s *Service) RunAdd(pathArg string) error {
+	return s.RunAddWithOptions(pathArg, AddOptions{})
+}
+
+// RunAddWithOptions adds a file to protection and replaces it with a RAM-disk symlink.
+func (s *Service) RunAddWithOptions(pathArg string, opts AddOptions) error {
 	fullPath, err := expandUserPath(pathArg)
 	if err != nil {
 		return err
@@ -50,17 +65,47 @@ func (s *Service) RunAdd(pathArg string) error {
 	if fromInsecure && fileExists(tracked.HomePath) {
 		return fmt.Errorf("cannot protect RAM-disk file %s: %s already exists", fullPath, tracked.HomePath)
 	}
+	if opts.AllowKMSBypass && !isAWSCredentialPortablePath(tracked.Portable) {
+		return fmt.Errorf("--allow-kms-bypass is only valid for files under $HOME/.aws")
+	}
+	if shouldUseKMSForPortable(cfg, tracked.Portable) && isAWSCredentialPortablePath(tracked.Portable) {
+		if !opts.AllowKMSBypass {
+			return fmt.Errorf("cannot protect %s with kms enabled: aws credential dependency loop detected; rerun add with --allow-kms-bypass for this single file", tracked.Portable)
+		}
+	}
+	useKMS := shouldUseKMSForPortable(cfg, tracked.Portable)
+	if opts.AllowKMSBypass {
+		useKMS = false
+	}
+	if useKMS {
+		if err := ensureKMSReady(cfg); err != nil {
+			return err
+		}
+	}
 
-	p := planAdd(paths, cfg, tracked, fullPath, fromInsecure, key)
+	p := planAdd(paths, cfg, tracked, fullPath, fromInsecure, key, opts)
 	if err := s.applyPlan(p); err != nil {
 		return err
 	}
 	return nil
 }
 
-func planAdd(paths appPaths, cfg *config, tracked trackedFile, sourcePath string, fromInsecure bool, key []byte) plan {
+func planAdd(paths appPaths, cfg *config, tracked trackedFile, sourcePath string, fromInsecure bool, key []byte, opts AddOptions) plan {
 	updated := &config{ProtectedFiles: append([]string{}, cfg.ProtectedFiles...)}
+	if cfg.KMS != nil {
+		kms := *cfg.KMS
+		updated.KMS = &kms
+	}
+	updated.KMSBypassFiles = append([]string{}, cfg.KMSBypassFiles...)
 	updated.ProtectedFiles = append(updated.ProtectedFiles, tracked.Portable)
+	if opts.AllowKMSBypass {
+		updated.KMSBypassFiles = appendUnique(updated.KMSBypassFiles, tracked.Portable)
+	}
+	useKMS := shouldUseKMSForPortable(cfg, tracked.Portable)
+	if opts.AllowKMSBypass {
+		useKMS = false
+	}
+	kmsCfg, _ := cfg.kmsRuntimeConfig()
 
 	actions := []action{
 		{Kind: actionEnsureEncryptedDir, Path: paths.SecureDir},
@@ -72,7 +117,7 @@ func planAdd(paths appPaths, cfg *config, tracked trackedFile, sourcePath string
 		actions = append(actions, action{Kind: actionCopyFile, Source: sourcePath, Path: tracked.InsecurePath, Perm: 0600})
 	}
 	actions = append(actions,
-		action{Kind: actionEncryptFile, Source: tracked.InsecurePath, Path: tracked.SecurePath, Key: key},
+		action{Kind: actionEncryptFile, Source: tracked.InsecurePath, Path: tracked.SecurePath, Key: key, UseKMS: useKMS, KMS: kmsCfg},
 		action{Kind: actionReplaceWithSymlink, Path: tracked.HomePath, Target: tracked.InsecurePath},
 		action{Kind: actionWriteConfig, Config: updated},
 	)

@@ -29,12 +29,12 @@ func (s *Service) applyAction(a action) error {
 		}
 		return nil
 	case actionEncryptFile:
-		if err := encryptFile(a.Source, a.Path, a.Key); err != nil {
+		if err := encryptFile(a.Source, a.Path, a.Key, a.UseKMS, a.KMS); err != nil {
 			return fmt.Errorf("encrypt file %s to %s: %w", a.Source, a.Path, err)
 		}
 		return nil
 	case actionDecryptFile:
-		if err := decryptFile(a.Source, a.Path, a.Key); err != nil {
+		if err := decryptFile(a.Source, a.Path, a.Key, a.UseKMS, a.KMS); err != nil {
 			return fmt.Errorf("decrypt file %s to %s: %w", a.Source, a.Path, err)
 		}
 		return nil

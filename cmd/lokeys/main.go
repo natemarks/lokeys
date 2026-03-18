@@ -50,6 +50,7 @@ func registerCommands() {
 		&restoreCommand{},
 		&rotateCommand{},
 		&sessionExportCommand{},
+		&enableKMSCommand{},
 		&versionCommand{},
 	} {
 		subcommands.Register(cmd, "")

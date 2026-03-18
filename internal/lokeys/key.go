@@ -85,6 +85,9 @@ func validateKeyForExistingProtectedFiles(cfg *config, key []byte) error {
 			return err
 		}
 		if _, err := decryptBytes(ciphertext, key); err != nil {
+			if isKMSError(err) {
+				return err
+			}
 			return fmt.Errorf("invalid encryption key for protected files")
 		}
 		return nil

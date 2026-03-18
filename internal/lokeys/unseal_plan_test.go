@@ -14,7 +14,7 @@ import "testing"
 // 3. Assert strict action count and ordering for deterministic execution.
 func TestPlanUnseal_DecryptAndSymlinkActions(t *testing.T) {
 	tracked := []trackedFile{{HomePath: "/home/u/a.txt", InsecurePath: "/ram/a.txt", SecurePath: "/secure/a.txt"}}
-	p := planUnseal(tracked, []byte("k"))
+	p := planUnseal(&config{}, tracked, []byte("k"))
 	if len(p.Actions) != 3 {
 		t.Fatalf("expected 3 actions, got %d", len(p.Actions))
 	}

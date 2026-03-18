@@ -222,3 +222,130 @@ func TestRunSealFailsFastOnFirstConflict(t *testing.T) {
 		t.Fatalf("expected unchanged config, got %#v", cfg.ProtectedFiles)
 	}
 }
+
+// TestRunAdd_AWSCredentialsRequireExplicitBypass verifies KMS-enabled setups
+// fail closed for ~/.aws files unless add is run with --allow-kms-bypass.
+func TestRunAdd_AWSCredentialsRequireExplicitBypass(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	_, encoded := mustEncodedSessionKey(t)
+	t.Setenv(SessionKeyEnv, encoded)
+
+	svc := newTestService()
+	if _, _, err := ensureConfig(); err != nil {
+		t.Fatalf("ensure config: %v", err)
+	}
+	if err := writeConfig(&config{ProtectedFiles: []string{}, KMS: &kmsConfig{Enabled: true, KeyID: "alias/lokeys", Region: "us-east-1"}}); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	awsCreds := filepath.Join(home, ".aws", "credentials")
+	if err := os.MkdirAll(filepath.Dir(awsCreds), dirPerm); err != nil {
+		t.Fatalf("mkdir aws dir: %v", err)
+	}
+	if err := os.WriteFile(awsCreds, []byte("[default]\naws_access_key_id=test\n"), 0600); err != nil {
+		t.Fatalf("write aws credentials: %v", err)
+	}
+
+	err := svc.RunAdd(awsCreds)
+	if err == nil {
+		t.Fatalf("expected aws dependency loop error")
+	}
+	if !strings.Contains(err.Error(), "dependency loop") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+// TestRunAdd_AWSCredentialsBypassProtectsOnlySingleFile verifies explicit file
+// bypass lets add proceed for ~/.aws files without requiring KMS usage.
+func TestRunAdd_AWSCredentialsBypassProtectsOnlySingleFile(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	_, encoded := mustEncodedSessionKey(t)
+	t.Setenv(SessionKeyEnv, encoded)
+
+	svc := newTestService()
+	if _, _, err := ensureConfig(); err != nil {
+		t.Fatalf("ensure config: %v", err)
+	}
+	if err := writeConfig(&config{ProtectedFiles: []string{}, KMS: &kmsConfig{Enabled: true, KeyID: "alias/lokeys", Region: "us-east-1"}}); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	awsCreds := filepath.Join(home, ".aws", "credentials")
+	if err := os.MkdirAll(filepath.Dir(awsCreds), dirPerm); err != nil {
+		t.Fatalf("mkdir aws dir: %v", err)
+	}
+	if err := os.WriteFile(awsCreds, []byte("[default]\naws_access_key_id=test\n"), 0600); err != nil {
+		t.Fatalf("write aws credentials: %v", err)
+	}
+
+	if err := svc.RunAddWithOptions(awsCreds, AddOptions{AllowKMSBypass: true}); err != nil {
+		t.Fatalf("RunAddWithOptions failed: %v", err)
+	}
+
+	cfg, err := readConfig(filepath.Join(home, configFileRel))
+	if err != nil {
+		t.Fatalf("read config: %v", err)
+	}
+	if !containsString(cfg.KMSBypassFiles, "$HOME/.aws/credentials") {
+		t.Fatalf("expected aws bypass file, got %#v", cfg.KMSBypassFiles)
+	}
+
+	securePath := filepath.Join(home, defaultEncryptedRel, ".aws", "credentials")
+	ciphertext, err := os.ReadFile(securePath)
+	if err != nil {
+		t.Fatalf("read secure file: %v", err)
+	}
+	if !strings.HasPrefix(string(ciphertext), fileMagicV2) {
+		t.Fatalf("expected non-kms ciphertext, got %q", string(ciphertext[:len(fileMagicV2)]))
+	}
+}
+
+// TestRunSeal_AWSCredentialsDiscoveryRequiresExplicitBypass verifies discovery
+// mode refuses ~/.aws files unless each one is explicitly bypassed.
+func TestRunSeal_AWSCredentialsDiscoveryRequiresExplicitBypass(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	_, encoded := mustEncodedSessionKey(t)
+	t.Setenv(SessionKeyEnv, encoded)
+
+	svc := newTestService()
+	if _, _, err := ensureConfig(); err != nil {
+		t.Fatalf("ensure config: %v", err)
+	}
+	if err := writeConfig(&config{ProtectedFiles: []string{}, KMS: &kmsConfig{Enabled: true, KeyID: "alias/lokeys", Region: "us-east-1"}}); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	insecureAWS := filepath.Join(home, defaultDecryptedRel, ".aws", "config")
+	if err := os.MkdirAll(filepath.Dir(insecureAWS), dirPerm); err != nil {
+		t.Fatalf("mkdir insecure aws dir: %v", err)
+	}
+	if err := os.WriteFile(insecureAWS, []byte("[default]\nregion=us-east-1\n"), 0600); err != nil {
+		t.Fatalf("write insecure aws config: %v", err)
+	}
+
+	err := svc.RunSeal()
+	if err == nil {
+		t.Fatalf("expected explicit bypass error")
+	}
+	if !strings.Contains(err.Error(), "without explicit bypass") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if err := svc.RunSealWithOptions(SealOptions{AllowKMSBypassFiles: []string{"$HOME/.aws/config"}}); err != nil {
+		t.Fatalf("RunSealWithOptions failed: %v", err)
+	}
+
+	cfg, err := readConfig(filepath.Join(home, configFileRel))
+	if err != nil {
+		t.Fatalf("read config: %v", err)
+	}
+	if !containsString(cfg.KMSBypassFiles, "$HOME/.aws/config") {
+		t.Fatalf("expected discovered bypass entry, got %#v", cfg.KMSBypassFiles)
+	}
+}

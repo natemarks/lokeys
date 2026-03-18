@@ -23,8 +23,10 @@ type action struct {
 	Source string
 	Target string
 
-	Perm os.FileMode
-	Key  []byte
+	Perm   os.FileMode
+	Key    []byte
+	UseKMS bool
+	KMS    kmsRuntimeConfig
 
 	Config         *config
 	IgnoreNotExist bool

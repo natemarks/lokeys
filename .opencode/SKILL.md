@@ -23,6 +23,11 @@ Specialist agent capability
   - Improves determinism via stubs/fakes for prompts, mount calls, and environment dependencies.
   - Strengthens negative-path coverage for security and rollback behavior.
   - Recommends efficient test execution strategy for local dev and CI.
+- Documentation Story-Driven UX Specialist
+  - Produces clear, goal-based user documentation for non-expert but technically capable users.
+  - Converts feature changes into step-by-step instructions organized by user intent.
+  - Balances accuracy and accessibility without oversimplifying security-sensitive behavior.
+  - Adds practical verification, troubleshooting, and recovery steps for real workflows.
 
 Trigger list for AWS Cloud Security + KMS Specialist
 - Any code or config change that calls AWS KMS APIs directly.
@@ -36,6 +41,11 @@ Trigger list for Go Testing Specialist
 - Any change to crypto, key lifecycle, filesystem permissions, backup, or rotation logic.
 - Any addition of new subcommands, flags, or error/exit-code semantics.
 - Any test suite instability, flaky tests, or low-confidence coverage areas.
+
+Trigger list for Documentation Story-Driven UX Specialist
+- Any change to `README.md`.
+- Any new subcommand, workflow, or flag that affects user-facing usage guidance.
+- Any behavior change that requires migration notes, examples, or troubleshooting updates.
 
 Recommended tools
 - Go: `gofmt`, `goimports`, `golangci-lint`, `go vet`, `go test`.
@@ -51,3 +61,4 @@ Required reviews
 - Command Line Usability Specialist persona review.
 - AWS Cloud Security + KMS Specialist review for any AWS/KMS-related change.
 - Go Testing Specialist review for substantial Go logic or test changes.
+- Documentation Story-Driven UX Specialist review for any `README.md` change.

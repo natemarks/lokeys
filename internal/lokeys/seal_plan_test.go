@@ -18,7 +18,7 @@ func TestPlanSeal_WithDiscoveredFiles_AppendsConfigWrite(t *testing.T) {
 	tracked := []trackedFile{{Portable: "$HOME/a.txt", InsecurePath: "/ram/a.txt", SecurePath: "/secure/a.txt"}}
 	discovered := []trackedFile{{Portable: "$HOME/b.txt", HomePath: "/home/u/b.txt", InsecurePath: "/ram/b.txt", SecurePath: "/secure/b.txt"}}
 
-	p, _ := planSeal(paths, cfg, tracked, discovered, []byte("k"))
+	p, _ := planSeal(paths, cfg, tracked, discovered, []byte("k"), nil)
 	if len(p.Actions) == 0 {
 		t.Fatalf("expected plan actions")
 	}
@@ -35,7 +35,7 @@ func TestPlanSeal_WithDiscoveredFiles_AppendsConfigWrite(t *testing.T) {
 // 2. Scan actions for actionWriteConfig.
 // 3. Assert it is absent so config is not rewritten unnecessarily.
 func TestPlanSeal_NoDiscoveredFiles_SkipsConfigWrite(t *testing.T) {
-	p, _ := planSeal(appPaths{SecureDir: "/secure"}, &config{ProtectedFiles: []string{"$HOME/a.txt"}}, []trackedFile{{InsecurePath: "/ram/a.txt", SecurePath: "/secure/a.txt"}}, nil, []byte("k"))
+	p, _ := planSeal(appPaths{SecureDir: "/secure"}, &config{ProtectedFiles: []string{"$HOME/a.txt"}}, []trackedFile{{InsecurePath: "/ram/a.txt", SecurePath: "/secure/a.txt"}}, nil, []byte("k"), nil)
 	for _, a := range p.Actions {
 		if a.Kind == actionWriteConfig {
 			t.Fatalf("did not expect config write when no discovered files")

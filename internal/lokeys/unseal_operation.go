@@ -20,6 +20,11 @@ func (s *Service) RunUnseal() error {
 	if err := validateKeyForExistingProtectedFiles(cfg, key); err != nil {
 		return err
 	}
+	if anyPortableRequiresKMS(cfg, cfg.ProtectedFiles) {
+		if err := ensureKMSReady(cfg); err != nil {
+			return err
+		}
+	}
 
 	paths, err := s.appPaths()
 	if err != nil {
@@ -38,19 +43,21 @@ func (s *Service) RunUnseal() error {
 		tracked = append(tracked, tf)
 	}
 
-	p := planUnseal(tracked, key)
+	p := planUnseal(cfg, tracked, key)
 	if err := s.applyPlan(p); err != nil {
 		return err
 	}
 	return nil
 }
 
-func planUnseal(tracked []trackedFile, key []byte) plan {
+func planUnseal(cfg *config, tracked []trackedFile, key []byte) plan {
+	kmsCfg, _ := cfg.kmsRuntimeConfig()
 	actions := make([]action, 0, len(tracked)*3)
 	for _, tf := range tracked {
+		useKMS := shouldUseKMSForPortable(cfg, tf.Portable)
 		actions = append(actions,
 			action{Kind: actionEnsureParentDir, Path: tf.InsecurePath},
-			action{Kind: actionDecryptFile, Source: tf.SecurePath, Path: tf.InsecurePath, Key: key},
+			action{Kind: actionDecryptFile, Source: tf.SecurePath, Path: tf.InsecurePath, Key: key, UseKMS: useKMS, KMS: kmsCfg},
 			action{Kind: actionReplaceWithSymlink, Path: tf.HomePath, Target: tf.InsecurePath},
 		)
 	}

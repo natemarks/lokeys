@@ -27,6 +27,11 @@ func (s *Service) RunRotate() (string, int, error) {
 	if err := validateKeyForExistingProtectedFiles(cfg, oldKey); err != nil {
 		return "", 0, err
 	}
+	if anyPortableRequiresKMS(cfg, cfg.ProtectedFiles) {
+		if err := ensureKMSReady(cfg); err != nil {
+			return "", 0, err
+		}
+	}
 
 	paths, err := s.appPaths()
 	if err != nil {
@@ -43,7 +48,7 @@ func (s *Service) RunRotate() (string, int, error) {
 	if err := sealTrackedFromRamdisk(cfg, paths, oldKey); err != nil {
 		return "", 0, err
 	}
-	updatedCfg, err := s.sealTrackedAndDiscovered(cfg, paths, oldKey)
+	updatedCfg, err := s.sealTrackedAndDiscovered(cfg, paths, oldKey, SealOptions{})
 	if err != nil {
 		return "", 0, err
 	}

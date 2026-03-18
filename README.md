@@ -42,6 +42,7 @@ lokeys help
 - `lokeys backup`: create `~/.lokeys/secure/<epoch>.tar.gz` backup
 - `lokeys rotate`: rotate encrypted storage from old key to new key
 - `lokeys session-export`: print `export LOKEYS_SESSION_KEY='...'` for your shell
+- `lokeys enable-kms`: dry-run or bootstrap AWS KMS CMK envelope mode
 - `lokeys version`: print build/version string
 - `lokeys help`: show usage and subcommands
 
@@ -54,6 +55,45 @@ lokeys help
 - If `LOKEYS_SESSION_KEY` is not set, lokeys prompts securely.
 
 This means encrypted files are portable: move them to another machine and decrypt with the same passphrase.
+
+## Optional AWS KMS envelope mode
+
+`lokeys` can add an optional KMS envelope around its existing file encryption.
+
+- If KMS is not configured, `lokeys` behaves exactly as before.
+- If KMS is configured, non-bypassed protected files require KMS operations to succeed.
+- `lokeys` does not silently downgrade from KMS mode.
+
+Enable/validate KMS:
+
+```bash
+lokeys enable-kms
+lokeys enable-kms --apply
+```
+
+By default this command performs a dry run. `--apply` creates `alias/lokeys` when
+missing, enables key rotation, validates key usage, and writes config.
+
+### Special case: `~/.aws/*` credential files
+
+When KMS mode is enabled, protecting AWS credential-dependent files can create a
+dependency loop (you need AWS creds to use KMS).
+
+- `add` fails by default for `~/.aws/*` files.
+- You must explicitly bypass per-file:
+
+```bash
+lokeys add --allow-kms-bypass ~/.aws/credentials
+```
+
+- `seal` discovery also fails by default for discovered `~/.aws/*` files unless
+  each file is explicitly allowed:
+
+```bash
+lokeys seal --allow-kms-bypass-file '$HOME/.aws/config'
+```
+
+Bypass is file-scoped and does not apply to unrelated discovered files.
 
 Load a key into your current shell session:
 

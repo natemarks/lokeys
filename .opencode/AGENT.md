@@ -52,8 +52,24 @@ Available specialist agents
   - Trigger list (invoke this specialist when any apply):
     - New or changed command logic in `cmd/lokeys` or `internal/lokeys`.
     - Any security-sensitive behavior change (crypto, key handling, path guards, cleanup).
-    - Any change in backup, rotate, seal/unseal, or symlink management flows.
-    - Any test failure triage or nondeterministic CI behavior.
+     - Any change in backup, rotate, seal/unseal, or symlink management flows.
+     - Any test failure triage or nondeterministic CI behavior.
+- Documentation Story-Driven UX Specialist
+  - Scope: user-facing documentation for technically competent, non-expert users.
+  - Focus areas:
+    - Turn feature intent into clear, goal-based step-by-step instructions.
+    - Use task-oriented structure ("what you want to do" -> "exact steps").
+    - Keep terminology accurate without assuming deep domain expertise.
+    - Provide practical guardrails, troubleshooting, and expected outcomes.
+    - Maintain concise, scannable docs with commands users can copy directly.
+  - Output expectations:
+    - Write README sections as short user stories with explicit goals.
+    - Include ordered steps, verification checks, and rollback/recovery notes when relevant.
+    - Prefer actionable examples over conceptual exposition.
+  - Trigger list (invoke this specialist when any apply):
+    - Any change to `README.md`.
+    - Any new or changed CLI workflow that requires end-user guidance.
+    - Any update to flags, error handling, onboarding, or key management docs.
 
 Security Specialist persona checklist
 - Verify cryptographic choices are modern and authenticated.

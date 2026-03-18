@@ -27,7 +27,7 @@ func TestPlanAdd_NewHomeFile_ContainsExpectedActions(t *testing.T) {
 	}
 	cfg := &config{ProtectedFiles: []string{}}
 
-	p := planAdd(paths, cfg, tracked, tracked.HomePath, false, []byte("k"))
+	p := planAdd(paths, cfg, tracked, tracked.HomePath, false, []byte("k"), AddOptions{})
 	if len(p.Actions) < 6 {
 		t.Fatalf("expected multiple add actions, got %d", len(p.Actions))
 	}
@@ -54,7 +54,7 @@ func TestPlanAdd_RamdiskSource_SkipsCopyAction(t *testing.T) {
 		Rel:          "a.txt",
 	}
 
-	p := planAdd(paths, &config{}, tracked, tracked.InsecurePath, true, []byte("k"))
+	p := planAdd(paths, &config{}, tracked, tracked.InsecurePath, true, []byte("k"), AddOptions{})
 	for _, a := range p.Actions {
 		if a.Kind == actionCopyFile {
 			t.Fatalf("did not expect copy action for RAM-origin add")
