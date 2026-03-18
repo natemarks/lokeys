@@ -24,6 +24,7 @@ func RunList() error {
 
 // RunList lists tracked files and their secure/insecure status.
 func (s *Service) RunList() error {
+	vlogf("list start")
 	config, created, err := ensureConfig()
 	if err != nil {
 		return fmt.Errorf("ensure config: %w", err)
@@ -151,6 +152,7 @@ func (s *Service) RunList() error {
 		}
 		fmt.Fprintf(out, "%s  insecure=%s  secure=MISSING  %s\n", tracked.Portable, hashOrMissing(insecureHash), statusUntrackedInsecure)
 	}
+	vlogf("list complete tracked=%d untracked=%d", len(config.ProtectedFiles), len(untracked))
 
 	return nil
 }

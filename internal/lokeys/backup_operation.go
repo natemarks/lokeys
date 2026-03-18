@@ -9,6 +9,7 @@ func RunBackup() (string, error) {
 
 // RunBackup creates a timestamped tar backup in secure storage.
 func (s *Service) RunBackup() (string, error) {
+	vlogf("backup start")
 	paths, err := s.appPaths()
 	if err != nil {
 		return "", err
@@ -35,7 +36,12 @@ func (s *Service) RunBackup() (string, error) {
 	if _, err := s.sealTrackedAndDiscovered(cfg, paths, key, SealOptions{}); err != nil {
 		return "", err
 	}
-	return s.createBackupSnapshot(paths)
+	backupPath, err := s.createBackupSnapshot(paths)
+	if err != nil {
+		return "", err
+	}
+	vlogf("backup complete path=%s", backupPath)
+	return backupPath, nil
 }
 
 func (s *Service) createBackupSnapshot(paths appPaths) (string, error) {

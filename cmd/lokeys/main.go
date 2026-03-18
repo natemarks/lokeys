@@ -13,8 +13,10 @@ import (
 )
 
 var version = "dev"
+var verbose bool
 
 func main() {
+	flag.BoolVar(&verbose, "verbose", false, "enable verbose logging")
 	registerCommands()
 	if subcommands.DefaultCommander != nil {
 		defaultExplain := subcommands.DefaultCommander.Explain
@@ -31,6 +33,7 @@ func main() {
 
 	flag.Usage = usage
 	flag.Parse()
+	lokeys.SetVerbose(verbose)
 
 	ctx := context.Background()
 	os.Exit(int(subcommands.Execute(ctx)))
@@ -49,6 +52,7 @@ func registerCommands() {
 		&backupCommand{},
 		&restoreCommand{},
 		&rotateCommand{},
+		&kmsRotateCommand{},
 		&sessionExportCommand{},
 		&enableKMSCommand{},
 		&versionCommand{},

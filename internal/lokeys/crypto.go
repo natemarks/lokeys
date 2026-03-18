@@ -331,6 +331,7 @@ func deriveFileKey(secret []byte, salt []byte) ([]byte, error) {
 }
 
 func encryptFile(src, dst string, key []byte, useKMS bool, kmsCfg kmsRuntimeConfig) error {
+	vlogf("encrypt file src=%s dst=%s use_kms=%t", src, dst, useKMS)
 	plaintext, err := os.ReadFile(src)
 	if err != nil {
 		return err
@@ -348,6 +349,7 @@ func encryptFile(src, dst string, key []byte, useKMS bool, kmsCfg kmsRuntimeConf
 }
 
 func decryptFile(src, dst string, key []byte, _ bool, _ kmsRuntimeConfig) error {
+	vlogf("decrypt file src=%s dst=%s", src, dst)
 	ciphertext, err := os.ReadFile(src)
 	if err != nil {
 		return err

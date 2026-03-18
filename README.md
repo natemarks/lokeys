@@ -1,23 +1,34 @@
 # lokeys
 
-`lokeys` keeps small sensitive files encrypted at rest and only decrypted in RAM.
+`lokeys` protects sensitive local files by combining three layers:
 
-It works by:
-- storing encrypted files in `~/.lokeys/secure`
-- mounting a tmpfs RAM disk at `~/.lokeys/insecure`
-- replacing original files with symlinks to the RAM-disk copies
-- tracking protected paths in `~/.config/lokeys`
+- encryption at rest in `~/.lokeys/secure`
+- decrypted working copies only in a RAM disk at `~/.lokeys/insecure`
+- optional AWS KMS envelope encryption (CMK) around lokeys ciphertext
 
-When you reboot, the RAM-disk contents disappear automatically.
+## Why this model is useful
+
+Many secrets (SSH keys, API tokens, cloud credentials) need to exist locally, but
+plain files on disk increase risk from disk theft, backups, snapshot leaks, and
+forensic recovery.
+
+`lokeys` reduces that risk by:
+
+- keeping encrypted files on persistent storage
+- keeping plaintext in volatile memory-backed tmpfs only while in use
+- optionally requiring AWS KMS CMK access for non-bypassed files
+
+Result: better protection against offline exposure, while keeping a practical CLI
+workflow for day-to-day development.
 
 ## Requirements
 
 - Linux with `tmpfs`
-- `sudo` access (used to mount the RAM disk)
+- `sudo` access (for mounting the RAM disk)
 
 ## Install (downloaded binary)
 
-Assume you downloaded an executable named `lokeys` from a release.
+Assume you downloaded an executable named `lokeys`.
 
 ```bash
 mkdir -p "$HOME/.local/bin"
@@ -25,202 +36,362 @@ mv ./lokeys "$HOME/.local/bin/lokeys"
 chmod 0755 "$HOME/.local/bin/lokeys"
 ```
 
-Make sure `~/.local/bin` is on your `PATH`, then verify:
+Verify:
 
 ```bash
 lokeys version
 lokeys help
 ```
 
-## Commands
+## Command summary
 
-- `lokeys add <path>`: protect a file and store plaintext only on RAM disk
-- `lokeys remove <path>`: unprotect a file and clean up managed copies
+- `lokeys add <path>`: protect a file and replace original with symlink to RAM copy
+- `lokeys remove <path>`: unprotect a file
 - `lokeys list`: show tracked files and integrity status
-- `lokeys seal`: encrypt tracked RAM-disk files and auto-protect new RAM-disk files
-- `lokeys unseal`: decrypt tracked files into RAM and ensure symlinks are in place
-- `lokeys backup`: create `~/.lokeys/secure/<epoch>.tar.gz` backup
-- `lokeys rotate`: rotate encrypted storage from old key to new key
-- `lokeys session-export`: print `export LOKEYS_SESSION_KEY='...'` for your shell
-- `lokeys enable-kms`: dry-run or bootstrap AWS KMS CMK envelope mode
-- `lokeys version`: print build/version string
-- `lokeys help`: show usage and subcommands
+- `lokeys seal`: encrypt current RAM-disk copies to secure storage
+- `lokeys unseal`: decrypt tracked files back into RAM disk
+- `lokeys backup`: create backup tarball in secure storage
+- `lokeys restore [archive.tar.gz]`: restore config + secure data from backup
+- `lokeys rotate`: rotate local encryption passphrase/key
+- `lokeys enable-kms [--apply]`: dry-run or bootstrap KMS config
+- `lokeys kms-rotate --target-key-id <alias-or-arn>`: re-wrap KMS-managed files to a new CMK
+- `lokeys session-export`: export `LOKEYS_SESSION_KEY` for current shell
 
-## Key handling
+Use global verbose logs:
 
-- `lokeys` never stores encryption keys in config.
-- You provide a passphrase (must be longer than 16 characters).
-- Passphrase is converted to key material, and each encrypted file stores KDF metadata (scrypt params + salt) in its header.
-- If `LOKEYS_SESSION_KEY` is set, lokeys uses it as the encoded key.
-- If `LOKEYS_SESSION_KEY` is not set, lokeys prompts securely.
+```bash
+lokeys --verbose unseal
+```
 
-This means encrypted files are portable: move them to another machine and decrypt with the same passphrase.
+## Key handling basics
 
-## Optional AWS KMS envelope mode
+- `lokeys` does not store your local encryption key in config.
+- If `LOKEYS_SESSION_KEY` is set, commands use it.
+- Otherwise, commands prompt securely for passphrase input.
+- KMS is optional. If not configured, lokeys works with local key only.
+- If KMS is configured, non-bypassed files fail closed when KMS cannot be used.
 
-`lokeys` can add an optional KMS envelope around its existing file encryption.
+---
 
-- If KMS is not configured, `lokeys` behaves exactly as before.
-- If KMS is configured, non-bypassed protected files require KMS operations to succeed.
-- `lokeys` does not silently downgrade from KMS mode.
+## Story 1: Start without KMS and protect `~/.ssh/id_rsa`
 
-Enable/validate KMS:
+**Goal**
+- Secure your SSH private key locally using encryption + RAM disk only.
+
+**Steps**
+
+1. Initialize lokeys state:
+
+```bash
+lokeys list
+```
+
+2. Protect your SSH key:
+
+```bash
+lokeys add ~/.ssh/id_rsa
+```
+
+3. Verify status:
+
+```bash
+lokeys list
+```
+
+**What lokeys does in the background**
+- creates or updates `~/.config/lokeys`
+- copies plaintext key into RAM disk (`~/.lokeys/insecure/.ssh/id_rsa`)
+- encrypts secure copy at `~/.lokeys/secure/.ssh/id_rsa`
+- replaces `~/.ssh/id_rsa` with a symlink to the RAM-disk copy
+
+---
+
+## Story 2: Use KMS, protect `~/.aws/credentials` and `~/.ssh/id_rsa`
+
+Assumption: your AWS CLI is already working and authenticated.
+
+**Goal**
+- Require KMS CMK envelope protection for normal files, but explicitly bypass KMS
+  for AWS credential files to avoid dependency loops.
+
+**Steps**
+
+1. Validate/preview KMS setup:
 
 ```bash
 lokeys enable-kms
+```
+
+2. Apply KMS setup:
+
+```bash
 lokeys enable-kms --apply
 ```
 
-By default this command performs a dry run. `--apply` creates `alias/lokeys` when
-missing, enables key rotation, validates key usage, and writes config.
-
-### Special case: `~/.aws/*` credential files
-
-When KMS mode is enabled, protecting AWS credential-dependent files can create a
-dependency loop (you need AWS creds to use KMS).
-
-- `add` fails by default for `~/.aws/*` files.
-- You must explicitly bypass per-file:
+3. Protect AWS credentials with explicit per-file bypass:
 
 ```bash
 lokeys add --allow-kms-bypass ~/.aws/credentials
 ```
 
-- `seal` discovery also fails by default for discovered `~/.aws/*` files unless
-  each file is explicitly allowed:
+4. Protect SSH key with KMS envelope enabled:
 
 ```bash
-lokeys seal --allow-kms-bypass-file '$HOME/.aws/config'
+lokeys add ~/.ssh/id_rsa
 ```
 
-Bypass is file-scoped and does not apply to unrelated discovered files.
-
-Load a key into your current shell session:
-
-```bash
-eval "$(lokeys session-export)"
-```
-
-After that, subsequent commands in that shell do not prompt for key input.
-
-## First-time round trip
-
-1. Initialize state
+5. Verify:
 
 ```bash
 lokeys list
 ```
 
-This creates `~/.config/lokeys` and lokeys directories if missing.
+**What lokeys does in the background**
+- configures `kms` in `~/.config/lokeys`
+- for `~/.aws/credentials`, stores it as local-key encrypted (bypassed)
+- for `~/.ssh/id_rsa`, wraps lokeys ciphertext with KMS-generated data key envelope
+- never silently downgrades KMS for non-bypassed files
 
-2. Create a test secret file
+---
 
-```bash
-mkdir -p "$HOME/secrets"
-printf 'api-token-123\n' > "$HOME/secrets/demo.txt"
-chmod 0600 "$HOME/secrets/demo.txt"
-```
+## Story 3: Understand `lokeys list`
 
-3. Protect it
+**Goal**
+- Confirm protection state and detect drift.
 
-```bash
-lokeys add "$HOME/secrets/demo.txt"
-```
-
-You may be prompted for:
-- encryption passphrase
-- sudo password (for mounting tmpfs)
-
-4. Check status
+Run:
 
 ```bash
 lokeys list
 ```
 
-`list` prints a legend and status values:
-- `OK`: secure and insecure hashes match
-- `MISSING_INSECURE`: RAM copy missing
-- `MISSING_SECURE`: encrypted copy missing
-- `MISMATCH`: secure and insecure content differ
+You will see tracked files with hashes and status.
 
-5. Seal changes after edits
+Status meanings:
 
-```bash
-lokeys seal
-```
+- `OK`: decrypted RAM copy matches encrypted secure copy
+- `MISSING_INSECURE`: RAM copy is missing (often after reboot)
+- `MISSING_SECURE`: encrypted copy is missing
+- `MISMATCH`: hashes differ (RAM and secure content diverged)
+- `UNTRACKED_INSECURE`: file exists in RAM disk but is not yet in config
 
-6. Restore decrypted working set
+---
+
+## Story 4: Edit a protected file and save changes
+
+**Goal**
+- Safely modify a protected file and persist the update to encrypted storage.
+
+**Steps**
+
+1. Ensure decrypted working set exists:
 
 ```bash
 lokeys unseal
 ```
 
-7. Create a backup tarball
+2. Edit file as usual (example):
+
+```bash
+nano ~/.ssh/id_rsa
+```
+
+3. Save encrypted state:
+
+```bash
+lokeys seal
+```
+
+4. Confirm:
+
+```bash
+lokeys list
+```
+
+**What lokeys does in the background**
+- `unseal` decrypts secure files into RAM disk and restores symlinks
+- your editor writes to RAM-backed plaintext
+- `seal` re-encrypts RAM contents into `~/.lokeys/secure`
+
+---
+
+## Story 5: Back up encrypted contents
+
+**Goal**
+- Create a portable backup of secure encrypted data + config.
+
+**Steps**
+
+1. Optional but recommended before backup:
+
+```bash
+lokeys seal
+```
+
+2. Create backup:
 
 ```bash
 lokeys backup
 ```
 
-Backup includes:
-- contents of `~/.lokeys/secure` (excluding the backup tar itself)
-- `.config/lokeys` entry in the tar
+3. Check created archive in secure dir:
 
-## Key rotation
+```bash
+ls -1 ~/.lokeys/secure/*.tar.gz
+```
 
-Use `rotate` to migrate all encrypted files to a newly prompted key.
+**What lokeys does in the background**
+- creates timestamped `.tar.gz` archive under `~/.lokeys/secure`
+- includes encrypted secure files and `.config/lokeys` metadata
+
+---
+
+## Story 6: Rotate only the local key (no KMS changes)
+
+**Goal**
+- Re-encrypt protected files with a new local passphrase-derived key.
+
+**Steps**
 
 ```bash
 lokeys rotate
 ```
 
-Rotation flow:
+You will be asked for old and new passphrases (unless old key is preloaded in
+`LOKEYS_SESSION_KEY`).
 
-- Uses old key from `LOKEYS_SESSION_KEY` when set; otherwise prompts for old key and validates it.
-- Encrypts each new rotated ciphertext from RAM-disk plaintext when available (`~/.lokeys/insecure/<rel>`), so unsaved RAM edits are included.
-- Synchronizes tracked RAM-disk files into secure storage with the old key, then creates a `backup` before re-encryption.
-- Prompts for a new key and verifies each temp rotated file decrypts correctly with the new key before replacing old ciphertext.
+**What lokeys does in the background**
+- syncs latest RAM content to secure storage
+- creates backup snapshot first
+- verifies each rotated temp file decrypts with the new key before replace
+- KMS CMK setting is unchanged
 
-8. Remove protection (optional)
+---
 
-```bash
-lokeys remove "$HOME/secrets/demo.txt"
-```
+## Story 7: Rotate local key using a manually exported session key
 
-## RAM-disk-created files
+**Goal**
+- Avoid old-key prompt during rotation by preloading key in your shell.
 
-You can now create new files directly under `~/.lokeys/insecure` and protect them without moving them first.
+**Steps**
 
-### `add` behavior for RAM-disk files
-
-- If `add` receives a path under `~/.lokeys/insecure/<rel>`, lokeys derives the canonical tracked path as `$HOME/<rel>`.
-- If `$HOME/<rel>` already exists, `add` fails to avoid overwriting an existing home file.
-- If `$HOME/<rel>` does not exist, lokeys:
-  - encrypts `~/.lokeys/insecure/<rel>` to `~/.lokeys/secure/<rel>`
-  - creates `$HOME/<rel>` as a symlink to `~/.lokeys/insecure/<rel>`
-  - tracks `$HOME/<rel>` in config
-
-Example:
+1. Export session key:
 
 ```bash
-mkdir -p "$HOME/.lokeys/insecure/new/project"
-printf 'draft-secret\n' > "$HOME/.lokeys/insecure/new/project/token.txt"
-lokeys add "$HOME/.lokeys/insecure/new/project/token.txt"
+eval "$(lokeys session-export)"
 ```
 
-### `seal` behavior for RAM-disk files
+2. Rotate:
 
-- `seal` still encrypts all currently tracked files.
-- `seal` also scans `~/.lokeys/insecure` for regular files that are not yet tracked.
-- For each untracked RAM-disk file at `<rel>`, lokeys compares against `$HOME/<rel>`:
-  - if `$HOME/<rel>` exists, `seal` fails immediately (fail-fast on first conflict)
-  - if `$HOME/<rel>` does not exist, lokeys protects that file using `<rel>` and tracks it
+```bash
+lokeys rotate
+```
+
+3. Optionally clear shell key:
+
+```bash
+unset LOKEYS_SESSION_KEY
+```
+
+**What lokeys does in the background**
+- uses `LOKEYS_SESSION_KEY` as old key source
+- still prompts for and validates a different new key
+
+---
+
+## Story 8: Rotate KMS CMK (`kms-rotate`)
+
+**Goal**
+- Keep local key the same, but re-wrap KMS-managed encrypted files to a new CMK.
+
+**Steps**
+
+1. Choose target key (alias or ARN), then run:
+
+```bash
+lokeys kms-rotate --target-key-id alias/lokeys-next
+```
+
+2. If needed, set explicit region:
+
+```bash
+lokeys kms-rotate --target-key-id arn:aws:kms:us-east-1:123456789012:key/abcd-1234 --region us-east-1
+```
+
+**What lokeys does in the background**
+- validates target CMK can generate data keys
+- creates backup snapshot first
+- re-wraps only KMS-managed files (skips bypassed files like `~/.aws/credentials`)
+- updates KMS key config after successful rotation
+
+---
+
+## Story 9: Restore on a new machine
+
+Assumption: new machine has working AWS CLI credentials (for KMS-backed files).
+
+**Goal**
+- Move encrypted lokeys state and config to another machine and recover working set.
+
+**Steps**
+
+1. Copy backup archive to new machine under `~/.lokeys/secure/` (or keep path handy).
+
+2. Restore from latest archive in secure dir:
+
+```bash
+lokeys restore
+```
+
+Or restore a specific archive path:
+
+```bash
+lokeys restore /path/to/1700000000.tar.gz
+```
+
+3. Recreate RAM-disk plaintext working set:
+
+```bash
+lokeys unseal
+```
+
+4. Verify:
+
+```bash
+lokeys list
+```
+
+**What lokeys does in the background**
+- restores encrypted files to `~/.lokeys/secure`
+- restores config to `~/.config/lokeys`
+- mounts RAM disk and then `unseal` reconstructs decrypted symlinked working files
+
+---
+
+## Notes on `~/.aws/*` with KMS
+
+When KMS mode is enabled, `~/.aws/*` files are blocked by default because they
+can be required to authenticate KMS calls.
+
+- single-file add bypass:
+
+```bash
+lokeys add --allow-kms-bypass ~/.aws/credentials
+```
+
+- discovered-file seal bypass (repeat per file):
+
+```bash
+lokeys seal --allow-kms-bypass-file '$HOME/.aws/config'
+```
+
+Bypass is file-scoped, explicit, and does not apply to other files.
 
 ## Troubleshooting
 
-- Wrong key in env var:
-  - unset it and retry: `unset LOKEYS_SESSION_KEY`
-- RAM-disk mount ownership problems:
-  - `sudo umount "$HOME/.lokeys/insecure"`
-  - rerun your command
-- Non-interactive terminal key prompt failure:
-  - export `LOKEYS_SESSION_KEY` first via `session-export`
+- Wrong key in environment:
+  - `unset LOKEYS_SESSION_KEY`
+- RAM-disk mount issue:
+  - `sudo umount "$HOME/.lokeys/insecure"` then rerun
+- Need detailed diagnostics:
+  - run with `--verbose`

@@ -3,15 +3,18 @@ package lokeys
 import "fmt"
 
 func (s *Service) applyPlan(p plan) error {
+	vlogf("apply plan with %d actions", len(p.Actions))
 	for _, a := range p.Actions {
 		if err := s.applyAction(a); err != nil {
 			return err
 		}
 	}
+	vlogf("apply plan complete")
 	return nil
 }
 
 func (s *Service) applyAction(a action) error {
+	vlogf("action=%s path=%s source=%s", a.Kind, a.Path, a.Source)
 	switch a.Kind {
 	case actionEnsureEncryptedDir:
 		if err := ensureEncryptedDir(a.Path); err != nil {

@@ -61,6 +61,7 @@ func promptForNewKeyWithWriter(out io.Writer) ([]byte, string, error) {
 }
 
 func validateKeyForExistingProtectedFiles(cfg *config, key []byte) error {
+	vlogf("validate encryption key against protected files=%d", len(cfg.ProtectedFiles))
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return err

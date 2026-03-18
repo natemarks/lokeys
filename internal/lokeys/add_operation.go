@@ -24,6 +24,7 @@ func (s *Service) RunAdd(pathArg string) error {
 
 // RunAddWithOptions adds a file to protection and replaces it with a RAM-disk symlink.
 func (s *Service) RunAddWithOptions(pathArg string, opts AddOptions) error {
+	vlogf("add start path=%s allow_kms_bypass=%t", pathArg, opts.AllowKMSBypass)
 	fullPath, err := expandUserPath(pathArg)
 	if err != nil {
 		return err
@@ -87,6 +88,7 @@ func (s *Service) RunAddWithOptions(pathArg string, opts AddOptions) error {
 	if err := s.applyPlan(p); err != nil {
 		return err
 	}
+	vlogf("add complete path=%s", tracked.Portable)
 	return nil
 }
 

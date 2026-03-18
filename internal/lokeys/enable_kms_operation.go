@@ -24,6 +24,7 @@ func RunEnableKMS(opts EnableKMSOptions) (string, error) {
 
 // RunEnableKMS validates or bootstraps AWS KMS envelope settings.
 func (s *Service) RunEnableKMS(opts EnableKMSOptions) (string, error) {
+	vlogf("enable-kms start alias=%s apply=%t", opts.Alias, opts.Apply)
 	cfg, _, err := ensureConfig()
 	if err != nil {
 		return "", fmt.Errorf("ensure config: %w", err)
@@ -86,16 +87,22 @@ func (s *Service) RunEnableKMS(opts EnableKMSOptions) (string, error) {
 		if err := writeConfig(updated); err != nil {
 			return "", fmt.Errorf("write config: %w", err)
 		}
-		return fmt.Sprintf("KMS %s key alias %s in region %s and updated config", action, alias, resolvedRegion), nil
+		message := fmt.Sprintf("KMS %s key alias %s in region %s and updated config", action, alias, resolvedRegion)
+		vlogf("enable-kms complete apply message=%s", message)
+		return message, nil
 	}
 
 	if targetKeyID == "" {
-		return fmt.Sprintf("Dry run: %s CMK with alias %s in region %s; rerun with --apply to proceed", action, alias, resolvedRegion), nil
+		message := fmt.Sprintf("Dry run: %s CMK with alias %s in region %s; rerun with --apply to proceed", action, alias, resolvedRegion)
+		vlogf("enable-kms complete dry-run message=%s", message)
+		return message, nil
 	}
 	if err := validateKMSGenerateDataKey(client, alias); err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("Dry run: validated KMS alias %s in region %s; rerun with --apply to write config", alias, resolvedRegion), nil
+	message := fmt.Sprintf("Dry run: validated KMS alias %s in region %s; rerun with --apply to write config", alias, resolvedRegion)
+	vlogf("enable-kms complete dry-run message=%s", message)
+	return message, nil
 }
 
 func findAliasTargetKeyID(client kmsAPI, alias string) (string, error) {

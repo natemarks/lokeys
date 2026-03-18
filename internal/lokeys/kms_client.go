@@ -27,6 +27,7 @@ type kmsAPI interface {
 var loadAWSConfig = awsconfig.LoadDefaultConfig
 
 func newKMSClient(region string) (kmsAPI, string, error) {
+	vlogf("create kms client requested_region=%s", region)
 	ctx := context.Background()
 	var cfg aws.Config
 	var err error
@@ -42,6 +43,7 @@ func newKMSClient(region string) (kmsAPI, string, error) {
 	if resolvedRegion == "" {
 		return nil, "", fmt.Errorf("%w: aws region is not configured", ErrKMSOperation)
 	}
+	vlogf("created kms client resolved_region=%s", resolvedRegion)
 	client := kms.NewFromConfig(cfg)
 	return client, resolvedRegion, nil
 }

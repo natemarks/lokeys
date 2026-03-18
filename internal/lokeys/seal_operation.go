@@ -29,6 +29,7 @@ func (s *Service) RunSeal() error {
 
 // RunSealWithOptions encrypts all tracked RAM-disk files into secure storage.
 func (s *Service) RunSealWithOptions(opts SealOptions) error {
+	vlogf("seal start allow_kms_bypass_files=%d", len(opts.AllowKMSBypassFiles))
 	cfg, _, err := ensureConfig()
 	if err != nil {
 		return fmt.Errorf("ensure config: %w", err)
@@ -52,10 +53,12 @@ func (s *Service) RunSealWithOptions(opts SealOptions) error {
 	if _, err := s.sealTrackedAndDiscovered(cfg, paths, key, opts); err != nil {
 		return err
 	}
+	vlogf("seal complete")
 	return nil
 }
 
 func (s *Service) sealTrackedAndDiscovered(cfg *config, paths appPaths, key []byte, opts SealOptions) (*config, error) {
+	vlogf("seal tracked=%d", len(cfg.ProtectedFiles))
 	trackedRels := make(map[string]struct{}, len(cfg.ProtectedFiles))
 	trackedFiles := make([]trackedFile, 0, len(cfg.ProtectedFiles))
 	for _, portable := range cfg.ProtectedFiles {
@@ -71,6 +74,7 @@ func (s *Service) sealTrackedAndDiscovered(cfg *config, paths appPaths, key []by
 	if err != nil {
 		return nil, err
 	}
+	vlogf("seal discovered_untracked=%d", len(discovered))
 
 	allowBypass := map[string]struct{}{}
 	for _, raw := range opts.AllowKMSBypassFiles {

@@ -9,6 +9,7 @@ func RunUnseal() error {
 
 // RunUnseal decrypts all tracked files into RAM-disk storage.
 func (s *Service) RunUnseal() error {
+	vlogf("unseal start")
 	cfg, _, err := ensureConfig()
 	if err != nil {
 		return fmt.Errorf("ensure config: %w", err)
@@ -47,6 +48,7 @@ func (s *Service) RunUnseal() error {
 	if err := s.applyPlan(p); err != nil {
 		return err
 	}
+	vlogf("unseal complete files=%d", len(tracked))
 	return nil
 }
 

@@ -9,6 +9,7 @@ func RunRotate() (string, int, error) {
 
 // RunRotate rotates encrypted storage from old key to a new key.
 func (s *Service) RunRotate() (string, int, error) {
+	vlogf("rotate start")
 	cfg, _, err := ensureConfig()
 	if err != nil {
 		return "", 0, fmt.Errorf("ensure config: %w", err)
@@ -78,5 +79,6 @@ func (s *Service) RunRotate() (string, int, error) {
 		return backupPath, 0, err
 	}
 
+	vlogf("rotate complete rotated=%d backup=%s", rotated, backupPath)
 	return backupPath, rotated, nil
 }

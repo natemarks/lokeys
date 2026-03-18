@@ -11,6 +11,7 @@ func ensureKMSReady(cfg *config) error {
 	if !enabled {
 		return nil
 	}
+	vlogf("kms health check key_id=%s region=%s", kmsCfg.KeyID, kmsCfg.Region)
 	client, _, err := newKMSClient(kmsCfg.Region)
 	if err != nil {
 		return err

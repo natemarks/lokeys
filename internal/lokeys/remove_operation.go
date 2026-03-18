@@ -12,6 +12,7 @@ func RunRemove(pathArg string) error {
 
 // RunRemove removes a file from protection and cleanup managed copies.
 func (s *Service) RunRemove(pathArg string) error {
+	vlogf("remove start path=%s", pathArg)
 	fullPath, err := expandUserPath(pathArg)
 	if err != nil {
 		return err
@@ -53,6 +54,7 @@ func (s *Service) RunRemove(pathArg string) error {
 	}
 
 	fmt.Fprintf(s.stdout(), "removed protection for %s\n", portable)
+	vlogf("remove complete path=%s", portable)
 	return nil
 }
 
