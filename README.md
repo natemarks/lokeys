@@ -74,6 +74,12 @@ lokeys --verbose unseal
 - KMS is optional. If not configured, lokeys works with local key only.
 - If KMS is configured, non-bypassed files fail closed when KMS cannot be used.
 
+Tip: load your local key once per shell session to avoid repeated prompts:
+
+```bash
+eval "$(lokeys session-export)"
+```
+
 ---
 
 ## Stories Without AWS KMS (Default)
@@ -88,19 +94,25 @@ no AWS KMS dependency.
 
 **Steps**
 
-1. Initialize lokeys state:
+1. Export session key once for this shell (recommended):
+
+```bash
+eval "$(lokeys session-export)"
+```
+
+2. Initialize lokeys state:
 
 ```bash
 lokeys list
 ```
 
-2. Protect your SSH key:
+3. Protect your SSH key:
 
 ```bash
 lokeys add ~/.ssh/id_rsa
 ```
 
-3. Verify status:
+4. Verify status:
 
 ```bash
 lokeys list
@@ -318,13 +330,19 @@ Assumption: your AWS CLI is already working and authenticated.
 
 **Steps**
 
-1. Validate/preview KMS setup:
+1. Export session key once for this shell (recommended):
+
+```bash
+eval "$(lokeys session-export)"
+```
+
+2. Validate/preview KMS setup:
 
 ```bash
 lokeys enable-kms
 ```
 
-2. Apply KMS setup:
+3. Apply KMS setup:
 
 ```bash
 lokeys enable-kms --apply
@@ -336,19 +354,19 @@ If you need a specific AWS profile:
 lokeys enable-kms --profile default --apply
 ```
 
-3. Protect AWS credentials with explicit per-file bypass:
+4. Protect AWS credentials with explicit per-file bypass:
 
 ```bash
 lokeys add --allow-kms-bypass ~/.aws/credentials
 ```
 
-4. Protect SSH key with KMS envelope enabled:
+5. Protect SSH key with KMS envelope enabled:
 
 ```bash
 lokeys add ~/.ssh/id_rsa
 ```
 
-5. Verify:
+6. Verify:
 
 ```bash
 lokeys list
