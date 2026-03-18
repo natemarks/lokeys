@@ -232,6 +232,13 @@ lokeys rotate
 You will be asked for old and new passphrases (unless old key is preloaded in
 `LOKEYS_SESSION_KEY`).
 
+How `rotate` chooses key input:
+
+- if `LOKEYS_SESSION_KEY` is set, lokeys uses it as the current/previous key
+  (no old-key prompt)
+- if `LOKEYS_SESSION_KEY` is not set, lokeys prompts for the current/previous key
+- in both cases, lokeys always prompts for a new key
+
 **What lokeys does in the background**
 - syncs latest RAM content to secure storage
 - creates backup snapshot first
@@ -267,7 +274,8 @@ unset LOKEYS_SESSION_KEY
 
 **What lokeys does in the background**
 - uses `LOKEYS_SESSION_KEY` as old key source
-- still prompts for and validates a different new key
+- skips old-key prompt when env var is present
+- always prompts for and validates a different new key
 
 ---
 
