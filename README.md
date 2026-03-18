@@ -21,6 +21,9 @@ forensic recovery.
 Result: better protection against offline exposure, while keeping a practical CLI
 workflow for day-to-day development.
 
+Default behavior is local-only encryption (no AWS KMS). KMS is optional and only
+used after you explicitly run `lokeys enable-kms --apply`.
+
 ## Requirements
 
 - Linux with `tmpfs`
@@ -73,7 +76,12 @@ lokeys --verbose unseal
 
 ---
 
-## Story 1: Start without KMS and protect `~/.ssh/id_rsa`
+## Stories Without AWS KMS (Default)
+
+These workflows use lokeys' default mode: local encryption key + RAM disk, with
+no AWS KMS dependency.
+
+### Story 1: Start without KMS and protect `~/.ssh/id_rsa`
 
 **Goal**
 - Secure your SSH private key locally using encryption + RAM disk only.
@@ -106,55 +114,7 @@ lokeys list
 
 ---
 
-## Story 2: Use KMS, protect `~/.aws/credentials` and `~/.ssh/id_rsa`
-
-Assumption: your AWS CLI is already working and authenticated.
-
-**Goal**
-- Require KMS CMK envelope protection for normal files, but explicitly bypass KMS
-  for AWS credential files to avoid dependency loops.
-
-**Steps**
-
-1. Validate/preview KMS setup:
-
-```bash
-lokeys enable-kms
-```
-
-2. Apply KMS setup:
-
-```bash
-lokeys enable-kms --apply
-```
-
-3. Protect AWS credentials with explicit per-file bypass:
-
-```bash
-lokeys add --allow-kms-bypass ~/.aws/credentials
-```
-
-4. Protect SSH key with KMS envelope enabled:
-
-```bash
-lokeys add ~/.ssh/id_rsa
-```
-
-5. Verify:
-
-```bash
-lokeys list
-```
-
-**What lokeys does in the background**
-- configures `kms` in `~/.config/lokeys`
-- for `~/.aws/credentials`, stores it as local-key encrypted (bypassed)
-- for `~/.ssh/id_rsa`, wraps lokeys ciphertext with KMS-generated data key envelope
-- never silently downgrades KMS for non-bypassed files
-
----
-
-## Story 3: Understand `lokeys list`
+### Story 2: Understand `lokeys list`
 
 **Goal**
 - Confirm protection state and detect drift.
@@ -177,7 +137,7 @@ Status meanings:
 
 ---
 
-## Story 4: Edit a protected file and save changes
+### Story 3: Edit a protected file and save changes
 
 **Goal**
 - Safely modify a protected file and persist the update to encrypted storage.
@@ -215,7 +175,7 @@ lokeys list
 
 ---
 
-## Story 5: Back up encrypted contents
+### Story 4: Back up encrypted contents
 
 **Goal**
 - Create a portable backup of secure encrypted data + config.
@@ -246,7 +206,7 @@ ls -1 ~/.lokeys/secure/*.tar.gz
 
 ---
 
-## Story 6: Rotate only the local key (no KMS changes)
+### Story 5: Rotate only the local key (no KMS changes)
 
 **Goal**
 - Re-encrypt protected files with a new local passphrase-derived key.
@@ -268,7 +228,7 @@ You will be asked for old and new passphrases (unless old key is preloaded in
 
 ---
 
-## Story 7: Rotate local key using a manually exported session key
+### Story 6: Rotate local key using a manually exported session key
 
 **Goal**
 - Avoid old-key prompt during rotation by preloading key in your shell.
@@ -299,7 +259,117 @@ unset LOKEYS_SESSION_KEY
 
 ---
 
-## Story 8: Rotate KMS CMK (`kms-rotate`)
+### Story 7: Restore on a new machine
+
+**Goal**
+- Move encrypted lokeys state and config to another machine and recover working set.
+
+**Steps**
+
+1. Copy backup archive to new machine under `~/.lokeys/secure/` (or keep path handy).
+
+2. Restore from latest archive in secure dir:
+
+```bash
+lokeys restore
+```
+
+Or restore a specific archive path:
+
+```bash
+lokeys restore /path/to/1700000000.tar.gz
+```
+
+3. Recreate RAM-disk plaintext working set:
+
+```bash
+lokeys unseal
+```
+
+4. Verify:
+
+```bash
+lokeys list
+```
+
+**What lokeys does in the background**
+- restores encrypted files to `~/.lokeys/secure`
+- restores config to `~/.config/lokeys`
+- mounts RAM disk and then `unseal` reconstructs decrypted symlinked working files
+
+---
+
+## Stories With AWS KMS (Optional)
+
+These workflows apply only after KMS is explicitly enabled. They add a KMS CMK
+envelope layer for non-bypassed files.
+
+### Story 1: Enable KMS and protect `~/.aws/credentials` and `~/.ssh/id_rsa`
+
+Assumption: your AWS CLI is already working and authenticated.
+
+**Goal**
+- Use KMS CMK envelope protection for regular files while safely bypassing KMS
+  for AWS credential files that can create auth dependency loops.
+
+**Steps**
+
+1. Validate/preview KMS setup:
+
+```bash
+lokeys enable-kms
+```
+
+2. Apply KMS setup:
+
+```bash
+lokeys enable-kms --apply
+```
+
+3. Protect AWS credentials with explicit per-file bypass:
+
+```bash
+lokeys add --allow-kms-bypass ~/.aws/credentials
+```
+
+4. Protect SSH key with KMS envelope enabled:
+
+```bash
+lokeys add ~/.ssh/id_rsa
+```
+
+5. Verify:
+
+```bash
+lokeys list
+```
+
+**What lokeys does in the background**
+- configures `kms` in `~/.config/lokeys`
+- encrypts `~/.aws/credentials` with local key only (explicit bypass)
+- encrypts `~/.ssh/id_rsa` with local key + KMS envelope
+- fails closed if KMS is required but unavailable
+
+---
+
+### Story 2: Use `list` in KMS mode and understand output
+
+**Goal**
+- Verify file integrity and quickly identify missing/deviated state in KMS mode.
+
+Run:
+
+```bash
+lokeys list
+```
+
+Statuses are the same (`OK`, `MISSING_INSECURE`, `MISSING_SECURE`, `MISMATCH`,
+`UNTRACKED_INSECURE`), but for KMS-managed files lokeys must also be able to
+decrypt the KMS envelope.
+
+---
+
+### Story 3: Rotate KMS CMK (`kms-rotate`)
 
 **Goal**
 - Keep local key the same, but re-wrap KMS-managed encrypted files to a new CMK.
@@ -326,7 +396,7 @@ lokeys kms-rotate --target-key-id arn:aws:kms:us-east-1:123456789012:key/abcd-12
 
 ---
 
-## Story 9: Restore on a new machine
+### Story 4: Restore on a new machine with working AWS credentials
 
 Assumption: new machine has working AWS CLI credentials (for KMS-backed files).
 
@@ -365,6 +435,7 @@ lokeys list
 - restores encrypted files to `~/.lokeys/secure`
 - restores config to `~/.config/lokeys`
 - mounts RAM disk and then `unseal` reconstructs decrypted symlinked working files
+- uses AWS credentials to access KMS for KMS-managed files during decrypt
 
 ---
 
