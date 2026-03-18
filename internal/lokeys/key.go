@@ -2,8 +2,10 @@ package lokeys
 
 import (
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/base64"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,31 +13,49 @@ import (
 	"golang.org/x/term"
 )
 
-func keyForCommand() ([]byte, error) {
-	if envKey, ok := os.LookupEnv(SessionKeyEnv); ok && strings.TrimSpace(envKey) != "" {
-		key, err := decodeEncodedKey(strings.TrimSpace(envKey))
-		if err != nil {
-			return nil, fmt.Errorf("%s must contain an encoded 32-byte key: %w", SessionKeyEnv, err)
-		}
-		return key, nil
+func keyFromSessionEnv() ([]byte, bool, error) {
+	envKey, ok := os.LookupEnv(SessionKeyEnv)
+	if !ok || strings.TrimSpace(envKey) == "" {
+		return nil, false, nil
 	}
-
-	key, _, err := promptForKey()
+	key, err := decodeEncodedKey(strings.TrimSpace(envKey))
 	if err != nil {
-		return nil, err
+		return nil, false, fmt.Errorf("%s must contain an encoded 32-byte key: %w", SessionKeyEnv, err)
 	}
-	return key, nil
+	return key, true, nil
 }
 
-func promptForKey() ([]byte, string, error) {
+func promptForKeyWithWriter(out io.Writer) ([]byte, string, error) {
 	if !term.IsTerminal(int(os.Stdin.Fd())) {
 		return nil, "", fmt.Errorf("encryption key required: run in a terminal")
 	}
-	fmt.Fprint(os.Stderr, "encryption key (>16 chars): ")
+	fmt.Fprint(out, "encryption key (>16 chars): ")
 	secret, err := term.ReadPassword(int(os.Stdin.Fd()))
-	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(out)
 	if err != nil {
 		return nil, "", err
+	}
+	return deriveKeyFromPassphrase(strings.TrimSpace(string(secret)))
+}
+
+func promptForNewKeyWithWriter(out io.Writer) ([]byte, string, error) {
+	if !term.IsTerminal(int(os.Stdin.Fd())) {
+		return nil, "", fmt.Errorf("new encryption key required: run in a terminal")
+	}
+	fmt.Fprint(out, "new encryption key (>16 chars): ")
+	secret, err := term.ReadPassword(int(os.Stdin.Fd()))
+	fmt.Fprintln(out)
+	if err != nil {
+		return nil, "", err
+	}
+	fmt.Fprint(out, "confirm new encryption key: ")
+	confirm, err := term.ReadPassword(int(os.Stdin.Fd()))
+	fmt.Fprintln(out)
+	if err != nil {
+		return nil, "", err
+	}
+	if strings.TrimSpace(string(secret)) != strings.TrimSpace(string(confirm)) {
+		return nil, "", fmt.Errorf("new encryption key confirmation does not match")
 	}
 	return deriveKeyFromPassphrase(strings.TrimSpace(string(secret)))
 }
@@ -93,4 +113,11 @@ func deriveKeyFromPassphrase(raw string) ([]byte, string, error) {
 	copy(key, sum[:])
 	encoded := base64.StdEncoding.EncodeToString(key)
 	return key, encoded, nil
+}
+
+func keysEqual(a []byte, b []byte) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	return subtle.ConstantTimeCompare(a, b) == 1
 }

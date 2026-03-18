@@ -54,12 +54,32 @@ func relToHome(path string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	rel, err := filepath.Rel(home, path)
+	rel, err := relToBase(home, path)
+	if err != nil {
+		return "", fmt.Errorf("path must be under $HOME")
+	}
+	return rel, nil
+}
+
+func relToInsecureRoot(path string, insecureDir string) (string, bool, error) {
+	rel, err := relToBase(insecureDir, path)
+	if err != nil {
+		return "", false, nil
+	}
+	return rel, true, nil
+}
+
+func homePathFromInsecureRel(home string, rel string) string {
+	return filepath.Join(home, rel)
+}
+
+func relToBase(base string, path string) (string, error) {
+	rel, err := filepath.Rel(filepath.Clean(base), filepath.Clean(path))
 	if err != nil {
 		return "", err
 	}
-	if rel == "." || strings.HasPrefix(rel, "..") {
-		return "", fmt.Errorf("path must be under $HOME")
+	if rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+		return "", fmt.Errorf("path must be under base")
 	}
 	return rel, nil
 }

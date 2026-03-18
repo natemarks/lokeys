@@ -14,8 +14,12 @@ import (
 )
 
 func encryptBytes(plaintext []byte, secret []byte) ([]byte, error) {
+	return encryptBytesWithRand(plaintext, secret, rand.Reader)
+}
+
+func encryptBytesWithRand(plaintext []byte, secret []byte, random io.Reader) ([]byte, error) {
 	salt := make([]byte, kdfSaltSize)
-	if _, err := io.ReadFull(rand.Reader, salt); err != nil {
+	if _, err := io.ReadFull(random, salt); err != nil {
 		return nil, err
 	}
 	key, err := deriveFileKey(secret, salt)
@@ -32,7 +36,7 @@ func encryptBytes(plaintext []byte, secret []byte) ([]byte, error) {
 		return nil, err
 	}
 	nonce := make([]byte, gcm.NonceSize())
-	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
+	if _, err := io.ReadFull(random, nonce); err != nil {
 		return nil, err
 	}
 	enc := gcm.Seal(nil, nonce, plaintext, nil)

@@ -48,7 +48,11 @@ func isMounted(path string) bool {
 	if err != nil {
 		return false
 	}
-	scanner := bufio.NewScanner(bytes.NewReader(data))
+	return isMountedInProcMounts(string(data), path)
+}
+
+func isMountedInProcMounts(procMounts string, path string) bool {
+	scanner := bufio.NewScanner(strings.NewReader(procMounts))
 	for scanner.Scan() {
 		fields := strings.Fields(scanner.Text())
 		if len(fields) < 2 {

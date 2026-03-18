@@ -12,9 +12,9 @@ import (
 type backupCommand struct{}
 
 func (*backupCommand) Name() string     { return "backup" }
-func (*backupCommand) Synopsis() string { return "archive secure storage to tarball" }
+func (*backupCommand) Synopsis() string { return "archive secure storage to compressed tarball" }
 func (*backupCommand) Usage() string {
-	return "backup\n\tPack contents of secure storage into timestamped tar in secure folder.\n"
+	return "backup\n\tPack contents of secure storage into timestamped tar.gz in secure folder.\n"
 }
 func (*backupCommand) SetFlags(*flag.FlagSet) {}
 func (*backupCommand) Execute(_ context.Context, f *flag.FlagSet, _ ...interface{}) subcommands.ExitStatus {

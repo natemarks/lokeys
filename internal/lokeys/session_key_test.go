@@ -7,6 +7,13 @@ import (
 	"testing"
 )
 
+// This module validates session-key error handling on command entrypoints.
+//
+// The test intentionally sets malformed env key material and asserts the
+// command fails with a parsing-focused, actionable error.
+
+// TestRunListFailsFastWithWrongSessionKey verifies list fails before decrypting
+// anything when the session env var is malformed.
 func TestRunListFailsFastWithWrongSessionKey(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)

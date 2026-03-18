@@ -47,6 +47,8 @@ func registerCommands() {
 		&sealCommand{},
 		&unsealCommand{},
 		&backupCommand{},
+		&restoreCommand{},
+		&rotateCommand{},
 		&sessionExportCommand{},
 		&versionCommand{},
 	} {
@@ -89,6 +91,16 @@ func requireNoArgs(args []string, command string) error {
 func requireOneArg(args []string, command string, name string) (string, error) {
 	if len(args) != 1 {
 		return "", usageError(command + " requires a single " + name)
+	}
+	return args[0], nil
+}
+
+func requireZeroOrOneArg(args []string, command string, name string) (string, error) {
+	if len(args) > 1 {
+		return "", usageError(command + " accepts at most one " + name)
+	}
+	if len(args) == 0 {
+		return "", nil
 	}
 	return args[0], nil
 }

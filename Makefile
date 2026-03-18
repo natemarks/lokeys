@@ -14,14 +14,14 @@ help: ## Show this help.
 GO_FILES := $(shell find . -name "*.go" -not -path "./vendor/*")
 SH_FILES := $(shell ls scripts/*.sh 2>/dev/null)
 
-.PHONY: static go-static bash-static gofmt-check go-vet golint go-test shfmt-check shellcheck build git-clean
+.PHONY: static go-static bash-static gofmt-check go-vet golint go-deadcode go-test shfmt-check shellcheck build git-clean
 
 static: go-static bash-static ## Run all static checks.
 
 build: git-clean ## Build lokeys with version.
 	go build -ldflags "-X main.version=$(COMMIT)" -o bin/lokeys ./cmd/lokeys
 
-go-static: gofmt-check go-vet golint go-test ## Run Go checks.
+go-static: gofmt-check go-vet golint go-deadcode go-test ## Run Go checks.
 
 bash-static: shfmt-check shellcheck ## Run Bash checks.
 
@@ -43,6 +43,10 @@ go-vet: ## Run go vet on all packages.
 golint: ## Run golint.
 	go install golang.org/x/lint/golint@latest
 	golint ./...
+
+go-deadcode: ## Run deadcode analysis.
+	go install golang.org/x/tools/cmd/deadcode@latest
+	deadcode ./...
 
 go-test: ## Run Go tests.
 	go test ./...
@@ -66,3 +70,9 @@ git-clean: ## Fail if git status is dirty.
 		printf "Git working tree is dirty. Commit or stash changes.\n"; \
 		exit 1; \
 	fi
+
+clean_config: ## Clean up generated config files.
+	bash scripts/clean_config.sh
+
+reset_data: ## Reset data directory.
+	bash scripts/reset_data.sh

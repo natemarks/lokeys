@@ -38,7 +38,7 @@ Steps:
 
 Expected:
 
-- Help text lists: `list`, `add`, `remove`, `seal`, `unseal`, `backup`, `session-export`, `version`
+- Help text lists: `list`, `add`, `remove`, `seal`, `unseal`, `backup`, `rotate`, `session-export`, `version`
 - Help text includes session key guidance
 - `version` prints a version string and exits `0`
 
@@ -136,12 +136,19 @@ Goal: Verify tar backup generation and content.
 
 Steps:
 
-1. Run: `$LOKEYS backup`
-2. Identify produced tar in `~/.lokeys/secure/*.tar`
-3. Inspect tar:
+1. Create an untracked RAM-disk file:
 
    ```bash
-   tar -tf "<backup-tar-path>"
+   mkdir -p "$HOME/.lokeys/insecure/backup-new"
+   printf 'backup-data\n' > "$HOME/.lokeys/insecure/backup-new/note.txt"
+   ```
+
+2. Run: `$LOKEYS backup`
+3. Identify produced archive in `~/.lokeys/secure/*.tar.gz`
+4. Inspect tar:
+
+   ```bash
+   tar -tzf "<backup-tar-gz-path>"
    ```
 
 Expected:
@@ -149,7 +156,109 @@ Expected:
 - Command prints `backup created: <path>`
 - Tar exists with mode `0600`
 - Tar includes encrypted storage content and `.config/lokeys`
+- External RAM-disk files are enrolled/protected before backup (secure copy + config entry)
 - Tar does not include itself recursively
+
+### 5d) Rotate key (`rotate`) with RAM changes preserved
+
+Goal: Verify key rotation uses RAM plaintext, creates pre-rotation backup, and validates new key output.
+
+Steps:
+
+1. Protect a file first (from earlier workflow), then edit through symlink path without sealing:
+
+   ```bash
+   printf 'rotated-from-ram\n' > "$TEST_ROOT/secrets/demo.txt"
+   ```
+
+2. Ensure old key is available (either export or be ready to type prompt):
+
+   ```bash
+   eval "$($LOKEYS session-export)"
+   ```
+
+3. Run: `$LOKEYS rotate`
+4. Confirm a new `~/.lokeys/secure/*.tar.gz` backup was created during rotation.
+5. Unset old key material and set new key from `session-export` prompt flow.
+6. Simulate RAM loss and restore:
+
+   ```bash
+   sudo umount "$HOME/.lokeys/insecure"
+   $LOKEYS unseal
+   cat "$TEST_ROOT/secrets/demo.txt"
+   ```
+
+Expected:
+
+- `rotate` succeeds and reports backup path plus rotated count
+- Pre-rotation backup archive exists as `.tar.gz`
+- External RAM-disk files are enrolled before rotation and included in rotated count
+- `unseal` with new key restores latest RAM-edited content (`rotated-from-ram`)
+- Old key no longer decrypts rotated ciphertext
+
+### 5b) Protect files created directly on RAM disk with `add`
+
+Goal: Verify `add` supports files created inside `~/.lokeys/insecure`.
+
+Steps:
+
+1. Create a new file directly on RAM disk:
+
+   ```bash
+   mkdir -p "$HOME/.lokeys/insecure/ram-created/demo"
+   printf 'ram-origin\n' > "$HOME/.lokeys/insecure/ram-created/demo/from-ram.txt"
+   ```
+
+2. Run:
+
+   ```bash
+   $LOKEYS add "$HOME/.lokeys/insecure/ram-created/demo/from-ram.txt"
+   ```
+
+3. Inspect derived home path:
+
+   ```bash
+   ls -l "$HOME/ram-created/demo/from-ram.txt"
+   ```
+
+4. Run: `$LOKEYS list`
+
+Expected:
+
+- `add` succeeds
+- `$HOME/ram-created/demo/from-ram.txt` is created as a symlink to `~/.lokeys/insecure/ram-created/demo/from-ram.txt`
+- Encrypted copy exists at `~/.lokeys/secure/ram-created/demo/from-ram.txt`
+- `list` includes `$HOME/ram-created/demo/from-ram.txt` with `OK`
+
+### 5c) Auto-protect new RAM files during `seal`
+
+Goal: Verify `seal` discovers and protects untracked RAM-disk files.
+
+Steps:
+
+1. Create a new untracked RAM-disk file:
+
+   ```bash
+   mkdir -p "$HOME/.lokeys/insecure/auto-seal"
+   printf 'auto-seal-value\n' > "$HOME/.lokeys/insecure/auto-seal/new.txt"
+   ```
+
+2. Run: `$LOKEYS seal`
+3. Verify derived home path:
+
+   ```bash
+   ls -l "$HOME/auto-seal/new.txt"
+   ```
+
+4. Run: `$LOKEYS list`
+
+Expected:
+
+- `seal` succeeds
+- New file is enrolled as protected using relative path `auto-seal/new.txt`
+- `$HOME/auto-seal/new.txt` exists as symlink to RAM copy
+- Encrypted copy exists at `~/.lokeys/secure/auto-seal/new.txt`
+- `list` includes `$HOME/auto-seal/new.txt` with `OK`
 
 ### 6) Session key workflow (`session-export`)
 
@@ -340,6 +449,233 @@ Expected:
 
 - Command fails with guidance to unmount and retry:
   - `ramdisk mounted at ... is not writable by the current user; unmount and retry: sudo umount ...`
+
+### 9) Conflict detection for RAM-origin files (`add` and `seal`)
+
+Goal: Verify conflict guard against existing derived home path.
+
+Steps (`add` conflict):
+
+```bash
+mkdir -p "$HOME/.lokeys/insecure/conflict-test"
+printf 'from-ram\n' > "$HOME/.lokeys/insecure/conflict-test/add.txt"
+mkdir -p "$HOME/conflict-test"
+printf 'already-here\n' > "$HOME/conflict-test/add.txt"
+$LOKEYS add "$HOME/.lokeys/insecure/conflict-test/add.txt"
+echo $?
+```
+
+Expected (`add`):
+
+- Command fails because derived `$HOME/conflict-test/add.txt` already exists
+- Exit code is non-zero
+
+Steps (`seal` fail-fast):
+
+```bash
+mkdir -p "$HOME/.lokeys/insecure/conflict-seal/a"
+mkdir -p "$HOME/.lokeys/insecure/conflict-seal/b"
+printf 'conflict\n' > "$HOME/.lokeys/insecure/conflict-seal/a/file.txt"
+printf 'safe\n' > "$HOME/.lokeys/insecure/conflict-seal/b/file.txt"
+mkdir -p "$HOME/conflict-seal/a"
+printf 'already-here\n' > "$HOME/conflict-seal/a/file.txt"
+$LOKEYS seal
+echo $?
+```
+
+Expected (`seal`):
+
+- `seal` fails immediately on first conflict (`$HOME/conflict-seal/a/file.txt` exists)
+- Exit code is non-zero
+- No new protected entry is added for the non-conflicting file in `conflict-seal/b/file.txt`
+
+### 10) `list` reports externally created RAM-disk files
+
+Goal: Verify list surfaces untracked insecure files without mutating config.
+
+Steps:
+
+```bash
+mkdir -p "$HOME/.lokeys/insecure/external"
+printf 'external\n' > "$HOME/.lokeys/insecure/external/new.txt"
+$LOKEYS list
+```
+
+Expected:
+
+- Output includes `$HOME/external/new.txt`
+- Status includes `UNTRACKED_INSECURE`
+- Config is not modified by `list`
+
+### 11) Restore on a new machine (`restore`)
+
+Goal: Verify restoring from copied `~/.lokeys/secure` recreates config and
+secure content without auto-unseal.
+
+Steps:
+
+1. Copy a secure directory containing one or more `*.tar.gz` backups to a new machine.
+2. Ensure `~/.config/lokeys` and `~/.lokeys/insecure` are absent.
+3. Run `lokeys restore` (defaults to latest archive) or `lokeys restore <archive.tar.gz>`.
+
+Expected:
+
+- Restore selects latest archive when no argument is provided.
+- Restore recreates `~/.config/lokeys` from archive content.
+- Restore writes encrypted files back to `~/.lokeys/secure`.
+- Restore ensures RAM-disk mount path exists, but does not auto-unseal files.
+
+## Automated Test Coverage (New)
+
+The codebase now includes expanded automated tests focused on isolated,
+readable validation of core logic and command wiring.
+
+### Module map and intent
+
+- `internal/lokeys/tracked_file_test.go`
+  - Covers canonical path mapping between `$HOME`, RAM-disk, and encrypted
+    storage roots.
+  - Verifies RAM-origin detection and outside-home rejection behavior.
+- `internal/lokeys/crypto_test.go`
+  - Covers v2 round-trip encryption/decryption, legacy v1 compatibility,
+    deterministic encryption fixture support (`encryptBytesWithRand`), and
+    malformed header/nonce error handling.
+- `internal/lokeys/fs_backup_test.go`
+  - Covers backup archive structure and deterministic timestamp naming via
+    `createBackupTarGzWithNow`.
+- `internal/lokeys/operations_test.go`
+  - Covers add/seal command orchestration through `Service` methods with temp
+    HOME fixtures and injected mount/key boundaries.
+  - Verifies conflict fail-fast behavior and no partial state mutation.
+- `internal/lokeys/list_operation_test.go`
+  - Covers list reporting for externally created untracked RAM-disk files.
+- `internal/lokeys/backup_operation_test.go`
+  - Covers backup command pre-backup enrollment of untracked RAM-disk files.
+- `internal/lokeys/restore_operation_test.go`
+  - Covers restore default/latest archive selection, explicit archive usage,
+    mount ensure behavior, and safe extraction checks.
+- `internal/lokeys/add_plan_test.go`, `internal/lokeys/seal_plan_test.go`,
+  `internal/lokeys/unseal_plan_test.go`, `internal/lokeys/remove_plan_test.go`
+  - Covers explicit planner output for core mutating flows.
+  - Verifies action ordering and whether config writes are planned only when
+    required.
+- `internal/lokeys/executor_test.go`
+  - Covers explicit plan executor behavior.
+  - Verifies ordered action application and stop-on-first-failure semantics.
+- `internal/lokeys/rotate_test.go`
+  - Covers key rotation semantics through injected prompt/mount dependencies,
+  including RAM-preferred plaintext, backup creation, prompt fallback,
+  same-key rejection, and discovered-file enrollment before rotation.
+- `internal/lokeys/key_test.go`
+  - Covers session env decoding errors and wrong-key validation behavior for
+    existing encrypted files.
+- `internal/lokeys/config_test.go`
+  - Covers atomic config replacement behavior (`write temp + rename`) and
+    resulting file mode expectations.
+- `internal/lokeys/ramdisk_test.go`
+  - Covers mount parsing helper behavior and non-interactive mount prompt
+    failure safeguards.
+- `internal/lokeys/service_test.go`
+  - Covers dependency defaulting for `Service` construction and verifies
+    interface-based adapters (`RamdiskMounter`, `KeySource`) are used by
+    command methods.
+- `internal/lokeys/session_key_test.go`
+  - Covers fail-fast command behavior with malformed session key env values.
+- `internal/lokeys/test_helpers_test.go`
+  - Provides shared test service/key fixtures used by operation/rotation tests
+    to keep test modules concise and consistent.
+- `cmd/lokeys/main_test.go`
+  - Covers CLI argument validators and error-to-exit-code mapping (`0/1/2`).
+
+### Function-level test index (purpose + function)
+
+- `internal/lokeys/tracked_file_test.go`
+  - `TestBuildTrackedFileFromPortable_ValidHomePath`: verifies portable path expansion and canonical path derivation.
+  - `TestBuildTrackedFileFromPortable_RejectsOutsideHome`: verifies outside-home rejection guard.
+  - `TestBuildTrackedFileFromInsecurePath_DetectsRamdiskOrigin`: verifies RAM-origin detection and derived home/portable mapping.
+  - `TestBuildTrackedFileFromInsecurePath_NonRamdiskReturnsFalse`: verifies non-RAM inputs return a clean false signal.
+  - `TestBuildTrackedFileFromHomePath_ComputesSecureAndInsecurePaths`: verifies canonical path mapping from home input.
+- `internal/lokeys/crypto_test.go`
+  - `TestEncryptDecryptV2RoundTrip`: verifies v2 ciphertext round-trip correctness.
+  - `TestDecryptBytesSupportsLegacyV1Format`: verifies backward compatibility with v1 payloads.
+  - `TestEncryptBytesWithRand_DeterministicHeaderAndNonceForFixtureReader`: verifies deterministic fixture generation with injected randomness.
+  - `TestDecryptBytesV2_InvalidNonceLen_Errors`: verifies malformed nonce metadata rejection.
+  - `TestDecryptBytesV2_UnsupportedKDFID_Errors`: verifies unsupported KDF identifiers are rejected.
+- `internal/lokeys/fs_backup_test.go`
+  - `TestCreateBackupTarGzCreatesCompressedArchive`: verifies archive creation and expected content entries.
+  - `TestCreateBackupTarGzWithNow_UsesDeterministicTimestampName`: verifies deterministic backup name generation with injected clock.
+- `internal/lokeys/operations_test.go`
+  - `TestRunAddProtectsRamdiskCreatedFile`: verifies RAM-origin add flow creates symlink, ciphertext, and config enrollment.
+  - `TestRunAddFailsWhenDerivedHomePathExists`: verifies add conflict guard on derived home path collisions.
+  - `TestRunSealDiscoversAndProtectsRamdiskFiles`: verifies seal discovery enrolls untracked RAM files.
+  - `TestRunSealFailsFastOnFirstConflict`: verifies seal aborts on first conflict without partial enrollment.
+- `internal/lokeys/list_operation_test.go`
+  - `TestRunList_ShowsExternallyCreatedInsecureFileAsUntracked`: verifies list reports untracked insecure files with `UNTRACKED_INSECURE` status.
+- `internal/lokeys/backup_operation_test.go`
+  - `TestRunBackup_EnrollsUntrackedInsecureFilesBeforeArchive`: verifies backup enrolls external RAM files before tar creation.
+- `internal/lokeys/restore_operation_test.go`
+  - `TestRunRestore_DefaultsToLatestArchive`: verifies restore selects newest archive when none is specified.
+  - `TestRunRestore_UsesSpecifiedArchive`: verifies restore honors explicit archive selection.
+  - `TestRestoreFromArchive_RejectsPathTraversal`: verifies restore extraction rejects traversal entries.
+- `internal/lokeys/add_plan_test.go`
+  - `TestPlanAdd_NewHomeFile_ContainsExpectedActions`: verifies add planner action chain for non-RAM sources.
+  - `TestPlanAdd_RamdiskSource_SkipsCopyAction`: verifies RAM-origin add planning skips redundant copy.
+- `internal/lokeys/seal_plan_test.go`
+  - `TestPlanSeal_WithDiscoveredFiles_AppendsConfigWrite`: verifies discovered-file enrollment plans a config write.
+  - `TestPlanSeal_NoDiscoveredFiles_SkipsConfigWrite`: verifies no config write is planned when nothing new is enrolled.
+- `internal/lokeys/unseal_plan_test.go`
+  - `TestPlanUnseal_DecryptAndSymlinkActions`: verifies unseal planner emits ensure-parent, decrypt, and symlink actions in order.
+- `internal/lokeys/remove_plan_test.go`
+  - `TestPlanRemove_ManagedSymlink_RestoreAndCleanupActions`: verifies remove planner emits restore, cleanup, and config update actions.
+- `internal/lokeys/executor_test.go`
+  - `TestApplyPlan_ExecutesActionsInOrder`: verifies sequential action execution on successful plans.
+  - `TestApplyPlan_StopsOnFirstFailure`: verifies executor halts and does not apply trailing actions after error.
+- `internal/lokeys/rotate_test.go`
+  - `TestRunRotateUsesRamdiskContentAndCreatesTarGzBackup`: verifies rotate uses freshest RAM plaintext and writes backup.
+  - `TestRunRotatePromptsOldKeyWhenEnvMissing`: verifies rotate falls back to prompt path when env key is absent.
+  - `TestRunRotateRejectsSameOldAndNewKey`: verifies rotate rejects no-op key changes.
+  - `TestRunRotate_EnrollsAndRotatesDiscoveredInsecureFiles`: verifies rotate enrolls discovered RAM files and rotates them under the new key.
+- `internal/lokeys/key_test.go`
+  - `TestKeyFromSessionEnv_InvalidBase64_ErrorsWithEnvName`: verifies malformed session-key env parse errors include env context.
+  - `TestKeyFromSessionEnv_InvalidLength_Errors`: verifies decoded key length enforcement.
+  - `TestValidateKeyForExistingProtectedFiles_WrongKey_Errors`: verifies wrong-key detection against existing secure files.
+- `internal/lokeys/config_test.go`
+  - `TestWriteConfigTo_ReplacesConfigContents`: verifies atomic config replacement updates data and preserves expected mode.
+- `internal/lokeys/ramdisk_test.go`
+  - `TestIsMountedInProcMounts_ParsesEntries`: verifies /proc/mounts parser behavior.
+  - `TestEnsureRamdiskMounted_NonTerminalPromptRequired_ErrorsActionably`: verifies clear non-interactive error behavior.
+- `internal/lokeys/service_test.go`
+  - `TestNewService_DefaultsMissingDependencies`: verifies default adapter/writer/clock population.
+  - `TestNewService_PreservesProvidedDependencies`: verifies explicit deps are preserved.
+  - `TestServiceRunList_UsesInjectedMountAndOutput`: verifies command uses injected mounter and stdout.
+  - `TestServiceRunSessionExport_UsesInjectedPrompt`: verifies session-export uses injected key prompt source.
+- `internal/lokeys/session_key_test.go`
+  - `TestRunListFailsFastWithWrongSessionKey`: verifies malformed env key fails before command progression.
+- `cmd/lokeys/main_test.go`
+  - `TestRequireNoArgs_ReturnsUsageError`: verifies extra args for no-arg commands map to usage errors.
+  - `TestRequireOneArg_ReturnsUsageErrorOnZeroOrMany`: verifies exact-arity enforcement.
+  - `TestRequireZeroOrOneArg_ReturnsUsageErrorOnMany`: verifies optional-arg command arity enforcement.
+  - `TestRunWithExitStatus_MapsUsageToExitUsageError`: verifies error-to-exit-code mapping (`0/1/2`).
+
+### How to run automated tests
+
+Run all tests:
+
+```bash
+go test ./... -count=1
+```
+
+Run only internal package tests:
+
+```bash
+go test ./internal/lokeys -count=1
+```
+
+Run only CLI package tests:
+
+```bash
+go test ./cmd/lokeys -count=1
+```
 
 ## Cleanup
 

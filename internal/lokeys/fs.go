@@ -2,6 +2,7 @@ package lokeys
 
 import (
 	"archive/tar"
+	"compress/gzip"
 	"fmt"
 	"io"
 	"os"
@@ -64,6 +65,17 @@ func fileExists(path string) bool {
 	return err == nil
 }
 
+func removePath(path string, ignoreNotExist bool) error {
+	err := os.Remove(path)
+	if err == nil {
+		return nil
+	}
+	if ignoreNotExist && os.IsNotExist(err) {
+		return nil
+	}
+	return err
+}
+
 func hashOrMissing(value string) string {
 	if value == "" {
 		return "MISSING"
@@ -80,22 +92,31 @@ func containsString(values []string, value string) bool {
 	return false
 }
 
-func createBackupTar(secureDir string, configPath string) (string, error) {
+func createBackupTarGzWithNow(secureDir string, configPath string, now func() time.Time) (string, error) {
 	if err := ensureEncryptedDir(secureDir); err != nil {
 		return "", err
 	}
 
-	backupName := fmt.Sprintf("%d.tar", time.Now().Unix())
+	backupName := fmt.Sprintf("%d.tar.gz", now().Unix())
 	backupPath := filepath.Join(secureDir, backupName)
 
 	out, err := os.OpenFile(backupPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
 	if err != nil {
 		return "", err
 	}
-	defer out.Close()
+	defer func() {
+		_ = out.Close()
+	}()
 
-	tw := tar.NewWriter(out)
-	defer tw.Close()
+	gzw := gzip.NewWriter(out)
+	defer func() {
+		_ = gzw.Close()
+	}()
+
+	tw := tar.NewWriter(gzw)
+	defer func() {
+		_ = tw.Close()
+	}()
 
 	if err := filepath.WalkDir(secureDir, func(path string, d os.DirEntry, walkErr error) error {
 		if walkErr != nil {
@@ -150,6 +171,16 @@ func createBackupTar(secureDir string, configPath string) (string, error) {
 	}
 
 	if err := addFileToTar(tw, configPath, filepath.ToSlash(configFileRel)); err != nil {
+		return "", err
+	}
+
+	if err := tw.Close(); err != nil {
+		return "", err
+	}
+	if err := gzw.Close(); err != nil {
+		return "", err
+	}
+	if err := out.Close(); err != nil {
 		return "", err
 	}
 
