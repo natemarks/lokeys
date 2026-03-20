@@ -500,6 +500,62 @@ lokeys seal --allow-kms-bypass-file '$HOME/.aws/config'
 
 Bypass is file-scoped, explicit, and does not apply to other files.
 
+## Integration workflow tests
+
+Integration workflow tests run complete user stories in isolated temporary
+directories. They intentionally run through real command orchestration, including
+sudo mount prompts and (for KMS mode) AWS credentials from a profile.
+
+### Local workflow group
+
+Runs end-to-end local-key scenarios:
+
+- generate test files
+- protect/edit/seal/verify consistency
+- simulate reboot by clearing insecure path then unseal and verify symlinks
+- rotate local key and re-verify seal/unseal
+- backup, wipe state, restore, and verify again
+
+Run:
+
+```bash
+make integration-workflows-local
+```
+
+### KMS workflow group
+
+Runs the same lifecycle with AWS KMS enabled, plus explicit `.aws/*` bypass
+validation.
+
+Required environment:
+
+- `AWS_PROFILE` (required)
+- `AWS_REGION` (optional)
+- `KMS_ALIAS` (optional, default `alias/lokeys-itest`)
+
+Run:
+
+```bash
+make integration-workflows-kms AWS_PROFILE=default
+```
+
+### Run both groups
+
+```bash
+make integration-workflows AWS_PROFILE=default
+```
+
+### Path isolation and overrides
+
+Integration scripts set all lokeys path overrides to temporary locations:
+
+- `LOKEYS_HOME`
+- `LOKEYS_CONFIG_PATH`
+- `LOKEYS_SECURE_DIR`
+- `LOKEYS_INSECURE_DIR`
+
+This keeps tests isolated from your real home directory and config.
+
 ## Troubleshooting
 
 - Wrong key in environment:

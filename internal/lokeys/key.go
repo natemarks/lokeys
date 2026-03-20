@@ -61,12 +61,27 @@ func promptForNewKeyWithWriter(out io.Writer) ([]byte, string, error) {
 }
 
 func validateKeyForExistingProtectedFiles(cfg *config, key []byte) error {
-	vlogf("validate encryption key against protected files=%d", len(cfg.ProtectedFiles))
-	home, err := os.UserHomeDir()
+	paths, err := resolveAppPaths(PathOverrides{})
 	if err != nil {
 		return err
 	}
-	secureDir := filepath.Join(home, defaultEncryptedRel)
+	return validateKeyForExistingProtectedFilesAt(cfg, key, paths)
+}
+
+func (s *Service) validateKeyForExistingProtectedFiles(cfg *config, key []byte) error {
+	if s == nil {
+		return validateKeyForExistingProtectedFiles(cfg, key)
+	}
+	paths, err := s.appPaths()
+	if err != nil {
+		return err
+	}
+	return validateKeyForExistingProtectedFilesAt(cfg, key, paths)
+}
+
+func validateKeyForExistingProtectedFilesAt(cfg *config, key []byte, paths appPaths) error {
+	vlogf("validate encryption key against protected files=%d", len(cfg.ProtectedFiles))
+	secureDir := paths.SecureDir
 	kmsCfg, _ := cfg.kmsRuntimeConfig()
 
 	for _, portable := range cfg.ProtectedFiles {

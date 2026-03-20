@@ -16,6 +16,7 @@ type Deps struct {
 	Stderr  io.Writer        // key prompt output
 	Mounter RamdiskMounter   // mount boundary
 	Keys    KeySource        // key retrieval boundary
+	Paths   PathOverrides    // filesystem path overrides
 }
 
 // Service groups command operations with explicit dependencies.

@@ -10,6 +10,7 @@ import (
 type testServiceOpts struct {
 	newKeyPrompt []byte
 	oldKeyPrompt []byte
+	paths        PathOverrides
 }
 
 type testMounter struct{}
@@ -87,6 +88,7 @@ func newTestServiceWithOpts(opts testServiceOpts) *Service {
 		Stdout:  io.Discard,
 		Stderr:  io.Discard,
 		Mounter: testMounter{},
+		Paths:   opts.paths,
 		Keys: testKeySource{
 			newKeyPrompt: opts.newKeyPrompt,
 			oldKeyPrompt: opts.oldKeyPrompt,

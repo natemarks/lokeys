@@ -13,8 +13,12 @@ help: ## Show this help.
 
 GO_FILES := $(shell find . -name "*.go" -not -path "./vendor/*")
 SH_FILES := $(shell ls scripts/*.sh 2>/dev/null)
+INTEGRATION_SH_FILES := $(shell find scripts -type f -name "*.sh" 2>/dev/null)
+ifneq ($(strip $(INTEGRATION_SH_FILES)),)
+SH_FILES := $(INTEGRATION_SH_FILES)
+endif
 
-.PHONY: static go-static bash-static gofmt-check go-vet golint go-deadcode go-test shfmt-check shellcheck build git-clean
+.PHONY: static go-static bash-static gofmt-check go-vet golint go-deadcode go-test shfmt-check shellcheck build git-clean integration-workflows integration-workflows-local integration-workflows-kms
 
 static: go-static bash-static ## Run all static checks.
 
@@ -60,7 +64,7 @@ shfmt-check: ## Check Bash formatting with shfmt.
 
 shellcheck: ## Run shellcheck on scripts.
 	@if [ -n "$(SH_FILES)" ]; then \
-		shellcheck $(SH_FILES); \
+		shellcheck -x $(SH_FILES); \
 	else \
 		printf "No Bash scripts found.\n"; \
 	fi
@@ -76,3 +80,13 @@ clean_config: ## Clean up generated config files.
 
 reset_data: ## Reset data directory.
 	bash scripts/reset_data.sh
+
+integration-workflows-local: ## Run local integration workflow test.
+	go build -o bin/lokeys ./cmd/lokeys
+	LOKEYS_BIN=./bin/lokeys bash scripts/integration/local_workflow.sh
+
+integration-workflows-kms: ## Run KMS integration workflow test (requires AWS_PROFILE).
+	go build -o bin/lokeys ./cmd/lokeys
+	LOKEYS_BIN=./bin/lokeys bash scripts/integration/kms_workflow.sh
+
+integration-workflows: integration-workflows-local integration-workflows-kms ## Run all integration workflow tests.

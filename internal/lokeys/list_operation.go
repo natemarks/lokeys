@@ -25,7 +25,7 @@ func RunList() error {
 // RunList lists tracked files and their secure/insecure status.
 func (s *Service) RunList() error {
 	vlogf("list start")
-	config, created, err := ensureConfig()
+	config, created, err := s.ensureConfig()
 	if err != nil {
 		return fmt.Errorf("ensure config: %w", err)
 	}
@@ -70,7 +70,7 @@ func (s *Service) RunList() error {
 		if err != nil {
 			return fmt.Errorf("read encryption key: %w", err)
 		}
-		if err := validateKeyForExistingProtectedFiles(config, key); err != nil {
+		if err := s.validateKeyForExistingProtectedFiles(config, key); err != nil {
 			return err
 		}
 		if anyPortableRequiresKMS(config, config.ProtectedFiles) {

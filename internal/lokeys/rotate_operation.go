@@ -10,7 +10,7 @@ func RunRotate() (string, int, error) {
 // RunRotate rotates encrypted storage from old key to a new key.
 func (s *Service) RunRotate() (string, int, error) {
 	vlogf("rotate start")
-	cfg, _, err := ensureConfig()
+	cfg, _, err := s.ensureConfig()
 	if err != nil {
 		return "", 0, fmt.Errorf("ensure config: %w", err)
 	}
@@ -25,7 +25,7 @@ func (s *Service) RunRotate() (string, int, error) {
 			return "", 0, fmt.Errorf("prompt for old key: %w", err)
 		}
 	}
-	if err := validateKeyForExistingProtectedFiles(cfg, oldKey); err != nil {
+	if err := s.validateKeyForExistingProtectedFiles(cfg, oldKey); err != nil {
 		return "", 0, err
 	}
 	if anyPortableRequiresKMS(cfg, cfg.ProtectedFiles) {

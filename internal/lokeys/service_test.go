@@ -62,8 +62,9 @@ func TestNewService_PreservesProvidedDependencies(t *testing.T) {
 	stderr := &bytes.Buffer{}
 	mounter := &stubMounter{}
 	keys := stubKeySource{}
+	paths := PathOverrides{Home: "/tmp/home", ConfigPath: "/tmp/cfg/lokeys.json", SecureDir: "/tmp/secure", InsecureDir: "/tmp/insecure"}
 
-	svc := NewService(Deps{Now: now, Stdout: stdout, Stderr: stderr, Mounter: mounter, Keys: keys})
+	svc := NewService(Deps{Now: now, Stdout: stdout, Stderr: stderr, Mounter: mounter, Keys: keys, Paths: paths})
 	if svc.deps.Now() != now() {
 		t.Fatalf("expected provided clock")
 	}
@@ -72,6 +73,9 @@ func TestNewService_PreservesProvidedDependencies(t *testing.T) {
 	}
 	if svc.deps.Mounter != mounter {
 		t.Fatalf("expected provided mounter")
+	}
+	if svc.deps.Paths != paths {
+		t.Fatalf("expected provided paths")
 	}
 }
 

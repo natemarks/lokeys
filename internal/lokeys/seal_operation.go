@@ -30,7 +30,7 @@ func (s *Service) RunSeal() error {
 // RunSealWithOptions encrypts all tracked RAM-disk files into secure storage.
 func (s *Service) RunSealWithOptions(opts SealOptions) error {
 	vlogf("seal start allow_kms_bypass_files=%d", len(opts.AllowKMSBypassFiles))
-	cfg, _, err := ensureConfig()
+	cfg, _, err := s.ensureConfig()
 	if err != nil {
 		return fmt.Errorf("ensure config: %w", err)
 	}
@@ -38,7 +38,7 @@ func (s *Service) RunSealWithOptions(opts SealOptions) error {
 	if err != nil {
 		return fmt.Errorf("read encryption key: %w", err)
 	}
-	if err := validateKeyForExistingProtectedFiles(cfg, key); err != nil {
+	if err := s.validateKeyForExistingProtectedFiles(cfg, key); err != nil {
 		return err
 	}
 

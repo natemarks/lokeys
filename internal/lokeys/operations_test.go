@@ -349,3 +349,51 @@ func TestRunSeal_AWSCredentialsDiscoveryRequiresExplicitBypass(t *testing.T) {
 		t.Fatalf("expected discovered bypass entry, got %#v", cfg.KMSBypassFiles)
 	}
 }
+
+// TestRunAddWithPathOverrides_WritesToOverriddenLocations verifies add respects
+// explicit config/secure/insecure overrides instead of default home-relative
+// directories.
+func TestRunAddWithPathOverrides_WritesToOverriddenLocations(t *testing.T) {
+	home := t.TempDir()
+	configDir := t.TempDir()
+	secureDir := t.TempDir()
+	insecureDir := t.TempDir()
+
+	t.Setenv("HOME", home)
+	t.Setenv(HomeDirEnv, home)
+	t.Setenv(ConfigPathEnv, "")
+	t.Setenv(SecureDirEnv, "")
+	t.Setenv(InsecureDirEnv, "")
+
+	_, encoded := mustEncodedSessionKey(t)
+	t.Setenv(SessionKeyEnv, encoded)
+
+	svc := newTestServiceWithOpts(testServiceOpts{paths: PathOverrides{
+		Home:        home,
+		ConfigPath:  filepath.Join(configDir, "lokeys.json"),
+		SecureDir:   secureDir,
+		InsecureDir: insecureDir,
+	}})
+
+	input := filepath.Join(home, "docs", "secret.txt")
+	if err := os.MkdirAll(filepath.Dir(input), dirPerm); err != nil {
+		t.Fatalf("mkdir input parent: %v", err)
+	}
+	if err := os.WriteFile(input, []byte("secret\n"), 0600); err != nil {
+		t.Fatalf("write input: %v", err)
+	}
+
+	if err := svc.RunAdd(input); err != nil {
+		t.Fatalf("RunAdd failed: %v", err)
+	}
+
+	if !fileExists(filepath.Join(secureDir, "docs", "secret.txt")) {
+		t.Fatalf("expected secure output under overridden secure dir")
+	}
+	if !fileExists(filepath.Join(configDir, "lokeys.json")) {
+		t.Fatalf("expected config under overridden config path")
+	}
+	if !fileExists(filepath.Join(insecureDir, "docs", "secret.txt")) {
+		t.Fatalf("expected insecure output under overridden insecure dir")
+	}
+}

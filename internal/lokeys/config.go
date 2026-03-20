@@ -8,11 +8,25 @@ import (
 )
 
 func ensureConfig() (*config, bool, error) {
-	home, err := os.UserHomeDir()
+	paths, err := resolveAppPaths(PathOverrides{})
 	if err != nil {
 		return nil, false, err
 	}
-	path := filepath.Join(home, configFileRel)
+	return ensureConfigAt(paths.ConfigPath)
+}
+
+func (s *Service) ensureConfig() (*config, bool, error) {
+	if s == nil {
+		return ensureConfig()
+	}
+	paths, err := s.appPaths()
+	if err != nil {
+		return nil, false, err
+	}
+	return ensureConfigAt(paths.ConfigPath)
+}
+
+func ensureConfigAt(path string) (*config, bool, error) {
 	_, statErr := os.Stat(path)
 	if statErr == nil {
 		cfg, err := readConfig(path)
@@ -34,12 +48,22 @@ func ensureConfig() (*config, bool, error) {
 }
 
 func writeConfig(cfg *config) error {
-	home, err := os.UserHomeDir()
+	paths, err := resolveAppPaths(PathOverrides{})
 	if err != nil {
 		return err
 	}
-	path := filepath.Join(home, configFileRel)
-	return writeConfigTo(path, cfg)
+	return writeConfigTo(paths.ConfigPath, cfg)
+}
+
+func (s *Service) writeConfig(cfg *config) error {
+	if s == nil {
+		return writeConfig(cfg)
+	}
+	paths, err := s.appPaths()
+	if err != nil {
+		return err
+	}
+	return writeConfigTo(paths.ConfigPath, cfg)
 }
 
 func readConfig(path string) (*config, error) {

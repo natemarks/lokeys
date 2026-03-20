@@ -58,7 +58,7 @@ func (s *Service) applyAction(a action) error {
 		}
 		return nil
 	case actionWriteConfig:
-		if err := writeConfig(a.Config); err != nil {
+		if err := s.writeConfig(a.Config); err != nil {
 			return fmt.Errorf("write config: %w", err)
 		}
 		return nil

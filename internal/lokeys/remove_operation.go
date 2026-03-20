@@ -22,7 +22,7 @@ func (s *Service) RunRemove(pathArg string) error {
 		return err
 	}
 
-	cfg, _, err := ensureConfig()
+	cfg, _, err := s.ensureConfig()
 	if err != nil {
 		return fmt.Errorf("ensure config: %w", err)
 	}

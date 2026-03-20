@@ -10,7 +10,7 @@ func RunUnseal() error {
 // RunUnseal decrypts all tracked files into RAM-disk storage.
 func (s *Service) RunUnseal() error {
 	vlogf("unseal start")
-	cfg, _, err := ensureConfig()
+	cfg, _, err := s.ensureConfig()
 	if err != nil {
 		return fmt.Errorf("ensure config: %w", err)
 	}
@@ -18,7 +18,7 @@ func (s *Service) RunUnseal() error {
 	if err != nil {
 		return fmt.Errorf("read encryption key: %w", err)
 	}
-	if err := validateKeyForExistingProtectedFiles(cfg, key); err != nil {
+	if err := s.validateKeyForExistingProtectedFiles(cfg, key); err != nil {
 		return err
 	}
 	if anyPortableRequiresKMS(cfg, cfg.ProtectedFiles) {

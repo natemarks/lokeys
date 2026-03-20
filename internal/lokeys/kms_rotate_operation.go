@@ -22,7 +22,7 @@ func RunKMSRotate(opts KMSRotateOptions) (string, int, error) {
 
 // RunKMSRotate rotates KMS envelope encryption to a target CMK.
 func (s *Service) RunKMSRotate(opts KMSRotateOptions) (string, int, error) {
-	cfg, _, err := ensureConfig()
+	cfg, _, err := s.ensureConfig()
 	if err != nil {
 		return "", 0, fmt.Errorf("ensure config: %w", err)
 	}
@@ -46,7 +46,7 @@ func (s *Service) RunKMSRotate(opts KMSRotateOptions) (string, int, error) {
 			return "", 0, fmt.Errorf("prompt for encryption key: %w", err)
 		}
 	}
-	if err := validateKeyForExistingProtectedFiles(cfg, oldKey); err != nil {
+	if err := s.validateKeyForExistingProtectedFiles(cfg, oldKey); err != nil {
 		return "", 0, err
 	}
 	if err := ensureKMSReady(cfg); err != nil {
@@ -123,7 +123,7 @@ func (s *Service) RunKMSRotate(opts KMSRotateOptions) (string, int, error) {
 	if strings.HasPrefix(targetKeyID, "alias/") {
 		newCfg.KMS.Alias = targetKeyID
 	}
-	if err := writeConfig(newCfg); err != nil {
+	if err := s.writeConfig(newCfg); err != nil {
 		return backupPath, rotated, fmt.Errorf("write config: %w", err)
 	}
 	vlogf("kms-rotate complete rotated=%d skipped=%d target=%s region=%s", rotated, skipped, targetKeyID, resolvedRegion)

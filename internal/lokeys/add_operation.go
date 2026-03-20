@@ -33,7 +33,7 @@ func (s *Service) RunAddWithOptions(pathArg string, opts AddOptions) error {
 		return err
 	}
 
-	cfg, _, err := ensureConfig()
+	cfg, _, err := s.ensureConfig()
 	if err != nil {
 		return fmt.Errorf("ensure config: %w", err)
 	}
@@ -41,7 +41,7 @@ func (s *Service) RunAddWithOptions(pathArg string, opts AddOptions) error {
 	if err != nil {
 		return fmt.Errorf("read encryption key: %w", err)
 	}
-	if err := validateKeyForExistingProtectedFiles(cfg, key); err != nil {
+	if err := s.validateKeyForExistingProtectedFiles(cfg, key); err != nil {
 		return err
 	}
 

@@ -8,7 +8,7 @@ import (
 )
 
 func expandUserPath(path string) (string, error) {
-	home, err := os.UserHomeDir()
+	home, err := resolveHomeDir(PathOverrides{})
 	if err != nil {
 		return "", err
 	}
@@ -28,7 +28,7 @@ func expandUserPath(path string) (string, error) {
 }
 
 func portablePath(path string) (string, error) {
-	home, err := os.UserHomeDir()
+	home, err := resolveHomeDir(PathOverrides{})
 	if err != nil {
 		return "", err
 	}
@@ -50,7 +50,7 @@ func expandPortablePath(path string) (string, error) {
 }
 
 func relToHome(path string) (string, error) {
-	home, err := os.UserHomeDir()
+	home, err := resolveHomeDir(PathOverrides{})
 	if err != nil {
 		return "", err
 	}

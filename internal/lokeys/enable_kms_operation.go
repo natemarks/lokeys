@@ -26,7 +26,7 @@ func RunEnableKMS(opts EnableKMSOptions) (string, error) {
 // RunEnableKMS validates or bootstraps AWS KMS envelope settings.
 func (s *Service) RunEnableKMS(opts EnableKMSOptions) (string, error) {
 	vlogf("enable-kms start alias=%s profile=%s apply=%t", opts.Alias, resolveAWSProfile(opts.Profile), opts.Apply)
-	cfg, _, err := ensureConfig()
+	cfg, _, err := s.ensureConfig()
 	if err != nil {
 		return "", fmt.Errorf("ensure config: %w", err)
 	}
@@ -86,7 +86,7 @@ func (s *Service) RunEnableKMS(opts EnableKMSOptions) (string, error) {
 			Alias:             alias,
 			EncryptionContext: map[string]string{"app": "lokeys"},
 		}
-		if err := writeConfig(updated); err != nil {
+		if err := s.writeConfig(updated); err != nil {
 			return "", fmt.Errorf("write config: %w", err)
 		}
 		message := fmt.Sprintf("KMS %s key alias %s in region %s and updated config", action, alias, resolvedRegion)
