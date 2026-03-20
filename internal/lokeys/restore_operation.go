@@ -125,14 +125,15 @@ func restoreFromArchive(archivePath string, paths appPaths) (int, error) {
 			continue
 		}
 
-		base := paths.SecureDir
 		isConfig := relSlash == filepath.ToSlash(configFileRel)
+		target := ""
 		if isConfig {
-			base = paths.Home
-		}
-		target, err := safeJoinUnder(base, filepath.FromSlash(relSlash))
-		if err != nil {
-			return 0, fmt.Errorf("unsafe archive entry %q: %w", hdr.Name, err)
+			target = paths.ConfigPath
+		} else {
+			target, err = safeJoinUnder(paths.SecureDir, filepath.FromSlash(relSlash))
+			if err != nil {
+				return 0, fmt.Errorf("unsafe archive entry %q: %w", hdr.Name, err)
+			}
 		}
 
 		switch hdr.Typeflag {
