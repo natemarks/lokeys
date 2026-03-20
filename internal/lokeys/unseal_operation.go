@@ -18,14 +18,6 @@ func (s *Service) RunUnseal() error {
 	if err != nil {
 		return fmt.Errorf("read encryption key: %w", err)
 	}
-	if err := s.validateKeyForExistingProtectedFiles(cfg, key); err != nil {
-		return err
-	}
-	if anyPortableRequiresKMS(cfg, cfg.ProtectedFiles) {
-		if err := ensureKMSReady(cfg); err != nil {
-			return err
-		}
-	}
 
 	paths, err := s.appPaths()
 	if err != nil {
@@ -43,13 +35,55 @@ func (s *Service) RunUnseal() error {
 		}
 		tracked = append(tracked, tf)
 	}
+	localTracked, kmsTracked := partitionTrackedByKMS(cfg, tracked)
+	awsSeeded := hasAWSAutoBypassTracked(localTracked)
 
-	p := planUnseal(cfg, tracked, key)
-	if err := s.applyPlan(p); err != nil {
+	if len(localTracked) > 0 {
+		if err := s.applyPlan(planUnseal(cfg, localTracked, key)); err != nil {
+			return err
+		}
+	}
+	if len(kmsTracked) == 0 {
+		vlogf("unseal complete files=%d", len(tracked))
+		return nil
+	}
+	if err := ensureKMSReady(cfg); err != nil {
+		if awsSeeded {
+			return fmt.Errorf("%w: decrypted local-key files (including .aws), but KMS-protected files could not be decrypted yet; run `lokeys unseal` again", err)
+		}
+		return err
+	}
+
+	if err := s.applyPlan(planUnseal(cfg, kmsTracked, key)); err != nil {
+		if awsSeeded && isKMSError(err) {
+			return fmt.Errorf("%w: decrypted local-key files (including .aws), but KMS-protected files could not be decrypted yet; run `lokeys unseal` again", err)
+		}
 		return err
 	}
 	vlogf("unseal complete files=%d", len(tracked))
 	return nil
+}
+
+func partitionTrackedByKMS(cfg *config, tracked []trackedFile) ([]trackedFile, []trackedFile) {
+	local := make([]trackedFile, 0, len(tracked))
+	kms := make([]trackedFile, 0, len(tracked))
+	for _, tf := range tracked {
+		if shouldUseKMSForPortable(cfg, tf.Portable) {
+			kms = append(kms, tf)
+			continue
+		}
+		local = append(local, tf)
+	}
+	return local, kms
+}
+
+func hasAWSAutoBypassTracked(tracked []trackedFile) bool {
+	for _, tf := range tracked {
+		if isAWSAutoBypassPortable(tf.Portable) {
+			return true
+		}
+	}
+	return false
 }
 
 func planUnseal(cfg *config, tracked []trackedFile, key []byte) plan {

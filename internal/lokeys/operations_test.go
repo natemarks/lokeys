@@ -452,6 +452,57 @@ func TestRunUnseal_AWSDefaultsDoNotRequireKMSHealthCheck(t *testing.T) {
 	}
 }
 
+// TestRunUnseal_AWSDefaultsDecryptBeforeKMSFailure verifies unseal first
+// decrypts local-key AWS defaults, then surfaces KMS failures for remaining
+// KMS-protected files with a rerun hint to break the credential dependency loop.
+func TestRunUnseal_AWSDefaultsDecryptBeforeKMSFailure(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	key, encoded := mustEncodedSessionKey(t)
+	t.Setenv(SessionKeyEnv, encoded)
+
+	awsConfigPortable := filepath.Join("$HOME", ".aws", "config")
+	awsConfigSecure := filepath.Join(home, defaultEncryptedRel, ".aws", "config")
+	if err := os.MkdirAll(filepath.Dir(awsConfigSecure), dirPerm); err != nil {
+		t.Fatalf("mkdir secure aws dir: %v", err)
+	}
+	awsCiphertext, err := encryptBytes([]byte("[default]\nregion=us-east-1\n"), key)
+	if err != nil {
+		t.Fatalf("encrypt aws config: %v", err)
+	}
+	if err := os.WriteFile(awsConfigSecure, awsCiphertext, 0600); err != nil {
+		t.Fatalf("write secure aws config: %v", err)
+	}
+	if _, _, err := ensureConfig(); err != nil {
+		t.Fatalf("ensure config: %v", err)
+	}
+
+	kmsPortable := filepath.Join("$HOME", "work", "kms-only.txt")
+	if err := writeConfig(&config{
+		ProtectedFiles: []string{awsConfigPortable, kmsPortable},
+		KMS:            &kmsConfig{Enabled: true, KeyID: "alias/lokeys", Region: ""},
+	}); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	if err := os.MkdirAll(filepath.Join(home, ".aws"), dirPerm); err != nil {
+		t.Fatalf("mkdir home aws dir: %v", err)
+	}
+
+	svc := newTestService()
+	err = svc.RunUnseal()
+	if err == nil {
+		t.Fatalf("expected kms readiness error")
+	}
+	if !strings.Contains(err.Error(), "run `lokeys unseal` again") {
+		t.Fatalf("expected rerun hint, got: %v", err)
+	}
+	if !fileExists(filepath.Join(home, defaultDecryptedRel, ".aws", "config")) {
+		t.Fatalf("expected unsealed aws config in insecure dir")
+	}
+}
+
 // TestRunAddWithPathOverrides_WritesToOverriddenLocations verifies add respects
 // explicit config/secure/insecure overrides instead of default home-relative
 // directories.
