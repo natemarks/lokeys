@@ -56,6 +56,8 @@ assert_symlink_target "$TEST_HOME/.aws/config" "$TEST_INSECURE_DIR/.aws/config"
 log_step "Rotating symmetric key and re-validating"
 printf 'Rotate requires interactive new-key prompt.\n'
 lk rotate
+log_step "Refreshing session key to rotated value"
+refresh_session_key_from_prompt
 lk seal
 clear_directory_contents "$TEST_INSECURE_DIR"
 lk unseal

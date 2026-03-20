@@ -52,6 +52,8 @@ assert_symlink_target "$TEST_HOME/notes/c.txt" "$TEST_INSECURE_DIR/notes/c.txt"
 log_step "Rotating symmetric key and verifying seal/unseal"
 printf 'Rotate requires interactive new-key prompt.\n'
 lk rotate
+log_step "Refreshing session key to rotated value"
+refresh_session_key_from_prompt
 lk seal
 clear_directory_contents "$TEST_INSECURE_DIR"
 lk unseal
