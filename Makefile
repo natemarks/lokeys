@@ -10,6 +10,10 @@ CURRENT_BRANCH := $(shell git rev-parse --abbrev-ref HEAD)
 RELEASE_TAG ?=
 RELEASE_LINUX_ARCHES ?=amd64 arm64
 RELEASE_ENFORCE_TAG ?=1
+RELEASE_ALLOW_NON_MAIN ?=0
+RELEASE_ALLOW_RETAG ?=0
+RELEASE_SKIP_STATIC ?=0
+CONFIRM ?=0
 DIST_DIR := dist
 RELEASE_ROOT := $(DIST_DIR)/release
 RELEASE_DIR := $(RELEASE_ROOT)/$(RELEASE_TAG)
@@ -24,7 +28,7 @@ ifneq ($(strip $(INTEGRATION_SH_FILES)),)
 SH_FILES := $(INTEGRATION_SH_FILES)
 endif
 
-.PHONY: static go-static bash-static gofmt-check go-vet golint go-deadcode go-test shfmt-check shellcheck build git-clean integration-workflows integration-workflows-local integration-workflows-kms release release-dry-run release-check release-clean release-build-linux release-checksums release-create release-upload
+.PHONY: static go-static bash-static gofmt-check go-vet golint go-deadcode go-test shfmt-check shellcheck build git-clean integration-workflows integration-workflows-local integration-workflows-kms release release-dry-run release-check release-clean release-build-linux release-checksums release-create release-upload release-tag-check release-tag release-tag-push release-all
 
 static: go-static bash-static ## Run all static checks.
 
@@ -110,6 +114,10 @@ release-check: ## Validate release prerequisites (tag/tools/auth/clean tree).
 		printf "Git working tree is dirty. Commit or stash changes before releasing.\n"; \
 		exit 1; \
 	fi
+	@if [ "$(RELEASE_ALLOW_NON_MAIN)" != "1" ] && [ "$(CURRENT_BRANCH)" != "$(DEFAULT_BRANCH)" ]; then \
+		printf "Releases must run from %s (current: %s). Set RELEASE_ALLOW_NON_MAIN=1 to override.\n" "$(DEFAULT_BRANCH)" "$(CURRENT_BRANCH)"; \
+		exit 1; \
+	fi
 	@command -v gh >/dev/null 2>&1 || { printf "gh CLI is required\n"; exit 1; }
 	@command -v tar >/dev/null 2>&1 || { printf "tar is required\n"; exit 1; }
 	@command -v sha256sum >/dev/null 2>&1 || { printf "sha256sum is required\n"; exit 1; }
@@ -121,6 +129,52 @@ release-check: ## Validate release prerequisites (tag/tools/auth/clean tree).
 			exit 1; \
 		fi; \
 	fi
+
+release-tag-check: ## Validate prerequisites for creating/pushing a release tag.
+	@if [ -z "$(RELEASE_TAG)" ]; then \
+		printf "RELEASE_TAG is required (example: make release-tag RELEASE_TAG=v0.1.0)\n"; \
+		exit 1; \
+	fi
+	@if ! printf "%s" "$(RELEASE_TAG)" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$$'; then \
+		printf "RELEASE_TAG must match vMAJOR.MINOR.PATCH (got %s)\n" "$(RELEASE_TAG)"; \
+		exit 1; \
+	fi
+	@if [ -n "$(shell git status --porcelain)" ]; then \
+		printf "Git working tree is dirty. Commit or stash changes before tagging.\n"; \
+		exit 1; \
+	fi
+	@if [ "$(RELEASE_ALLOW_NON_MAIN)" != "1" ] && [ "$(CURRENT_BRANCH)" != "$(DEFAULT_BRANCH)" ]; then \
+		printf "Tagging must run from %s (current: %s). Set RELEASE_ALLOW_NON_MAIN=1 to override.\n" "$(DEFAULT_BRANCH)" "$(CURRENT_BRANCH)"; \
+		exit 1; \
+	fi
+	@if [ "$(RELEASE_SKIP_STATIC)" != "1" ]; then \
+		$(MAKE) static; \
+	fi
+
+release-tag: release-tag-check ## Create annotated release tag at HEAD.
+	@if git rev-parse --verify --quiet "refs/tags/$(RELEASE_TAG)" >/dev/null; then \
+		if [ "$(RELEASE_ALLOW_RETAG)" = "1" ] && [ "$(CONFIRM)" = "1" ]; then \
+			printf "Recreating existing local tag %s\n" "$(RELEASE_TAG)"; \
+			git tag -d "$(RELEASE_TAG)"; \
+		else \
+			printf "Tag %s already exists locally. Use RELEASE_ALLOW_RETAG=1 CONFIRM=1 to recreate.\n" "$(RELEASE_TAG)"; \
+			exit 1; \
+		fi; \
+	fi
+	@git tag -a "$(RELEASE_TAG)" -m "lokeys $(RELEASE_TAG)"
+	@printf "Created local tag %s at %s\n" "$(RELEASE_TAG)" "$(shell git rev-parse --short HEAD)"
+
+release-tag-push: release-tag-check ## Push release tag to origin.
+	@if ! git rev-parse --verify --quiet "refs/tags/$(RELEASE_TAG)" >/dev/null; then \
+		printf "Tag %s does not exist locally. Run make release-tag RELEASE_TAG=%s first.\n" "$(RELEASE_TAG)" "$(RELEASE_TAG)"; \
+		exit 1; \
+	fi
+	@if [ "$(RELEASE_ALLOW_RETAG)" = "1" ] && [ "$(CONFIRM)" = "1" ]; then \
+		printf "Deleting remote tag %s before push\n" "$(RELEASE_TAG)"; \
+		git push origin ":refs/tags/$(RELEASE_TAG)"; \
+	fi
+	@git push origin "refs/tags/$(RELEASE_TAG)"
+	@printf "Pushed tag %s to origin\n" "$(RELEASE_TAG)"
 
 release-clean: ## Remove release build artifacts for current tag.
 	@if [ -n "$(RELEASE_TAG)" ]; then \
@@ -154,3 +208,5 @@ release-dry-run: ## Build artifacts/checksums without requiring a local tag.
 
 release: release-upload ## Publish GitHub release assets for current tag.
 	@printf "Release %s published with assets from %s\n" "$(RELEASE_TAG)" "$(RELEASE_DIR)"
+
+release-all: release-tag release-tag-push release ## Create tag, push tag, and publish release.
