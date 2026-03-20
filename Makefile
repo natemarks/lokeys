@@ -115,7 +115,7 @@ release-check: ## Validate release prerequisites (tag/tools/auth/clean tree).
 	@command -v sha256sum >/dev/null 2>&1 || { printf "sha256sum is required\n"; exit 1; }
 	@gh auth status >/dev/null
 	@if [ "$(RELEASE_ENFORCE_TAG)" = "1" ]; then \
-		git rev-parse "$(RELEASE_TAG)^{tag}" >/dev/null 2>&1 || { printf "Tag %s does not exist locally\n" "$(RELEASE_TAG)"; exit 1; }; \
+		git rev-parse --verify --quiet "refs/tags/$(RELEASE_TAG)" >/dev/null || { printf "Tag %s does not exist locally\n" "$(RELEASE_TAG)"; exit 1; }; \
 		if [ "$(shell git rev-parse HEAD)" != "$(shell git rev-list -n 1 $(RELEASE_TAG))" ]; then \
 			printf "HEAD (%s) does not match tag %s (%s)\n" "$(shell git rev-parse --short HEAD)" "$(RELEASE_TAG)" "$(shell git rev-parse --short $(RELEASE_TAG))"; \
 			exit 1; \
