@@ -99,20 +99,6 @@ lk_capture() {
 	"${cmd[@]}"
 }
 
-refresh_session_key_from_prompt() {
-	local export_line
-	export_line="$(lk_capture session-export)"
-	case "$export_line" in
-	export\ LOKEYS_SESSION_KEY=*)
-		eval "$export_line"
-		log_info "refreshed LOKEYS_SESSION_KEY from prompted key"
-		;;
-	*)
-		fail "unexpected session-export output: $export_line"
-		;;
-	esac
-}
-
 set_random_session_key() {
 	require_cmd openssl
 	export LOKEYS_SESSION_KEY

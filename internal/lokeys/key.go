@@ -39,6 +39,14 @@ func promptForKeyWithWriter(out io.Writer) ([]byte, string, error) {
 }
 
 func promptForNewKeyWithWriter(out io.Writer) ([]byte, string, error) {
+	if encoded, ok := os.LookupEnv(RotateNewKeyEnv); ok && strings.TrimSpace(encoded) != "" {
+		trimmed := strings.TrimSpace(encoded)
+		key, err := decodeEncodedKey(trimmed)
+		if err != nil {
+			return nil, "", fmt.Errorf("%s must contain an encoded 32-byte key: %w", RotateNewKeyEnv, err)
+		}
+		return key, trimmed, nil
+	}
 	if !term.IsTerminal(int(os.Stdin.Fd())) {
 		return nil, "", fmt.Errorf("new encryption key required: run in a terminal")
 	}

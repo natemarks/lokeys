@@ -10,6 +10,7 @@ const (
 	defaultRamdiskSize  = "100m"
 	defaultMountMode    = "0700"
 	SessionKeyEnv       = "LOKEYS_SESSION_KEY"
+	RotateNewKeyEnv     = "LOKEYS_ROTATE_NEW_KEY"
 	HomeDirEnv          = "LOKEYS_HOME"
 	ConfigPathEnv       = "LOKEYS_CONFIG_PATH"
 	SecureDirEnv        = "LOKEYS_SECURE_DIR"

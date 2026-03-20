@@ -50,10 +50,14 @@ assert_symlink_target "$TEST_HOME/ssh/id_test" "$TEST_INSECURE_DIR/ssh/id_test"
 assert_symlink_target "$TEST_HOME/notes/c.txt" "$TEST_INSECURE_DIR/notes/c.txt"
 
 log_step "Rotating symmetric key and verifying seal/unseal"
-printf 'Rotate requires interactive new-key prompt.\n'
+rotate_new_key="$(openssl rand -base64 32)"
+log_info "generated rotation key for non-interactive rotate"
+export LOKEYS_ROTATE_NEW_KEY="$rotate_new_key"
+printf 'Rotation uses auto-generated NEW key via LOKEYS_ROTATE_NEW_KEY; previous key comes from LOKEYS_SESSION_KEY.\n'
 lk rotate
-log_step "Refreshing session key to rotated value"
-refresh_session_key_from_prompt
+unset LOKEYS_ROTATE_NEW_KEY
+export LOKEYS_SESSION_KEY="$rotate_new_key"
+log_info "updated LOKEYS_SESSION_KEY to rotated key"
 lk seal
 clear_directory_contents "$TEST_INSECURE_DIR"
 lk unseal
@@ -82,6 +86,7 @@ restored_backup="$TEST_SECURE_DIR/$(basename "$saved_backup")"
 assert_file "$restored_backup"
 
 lk restore "$restored_backup"
+mkdir -p "$TEST_HOME/docs" "$TEST_HOME/ssh" "$TEST_HOME/notes"
 lk unseal
 list_after_restore="$(lk_capture list)"
 printf '%s\n' "$list_after_restore"
