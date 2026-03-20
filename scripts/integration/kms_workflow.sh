@@ -46,8 +46,7 @@ assert_list_status "$list_after_seal" "\$HOME/docs/a.txt" 'OK'
 assert_list_status "$list_after_seal" "\$HOME/.aws/config" 'OK'
 
 log_step "Simulating reboot and validating unseal links"
-rm -rf "$TEST_INSECURE_DIR"
-mkdir -p "$TEST_INSECURE_DIR"
+clear_directory_contents "$TEST_INSECURE_DIR"
 lk unseal
 assert_file "$TEST_INSECURE_DIR/docs/a.txt"
 assert_file "$TEST_INSECURE_DIR/.aws/config"
@@ -58,8 +57,7 @@ log_step "Rotating symmetric key and re-validating"
 printf 'Rotate requires interactive new-key prompt.\n'
 lk rotate
 lk seal
-rm -rf "$TEST_INSECURE_DIR"
-mkdir -p "$TEST_INSECURE_DIR"
+clear_directory_contents "$TEST_INSECURE_DIR"
 lk unseal
 list_after_rotate="$(lk_capture list)"
 printf '%s\n' "$list_after_rotate"
@@ -74,14 +72,14 @@ backup_path="$(printf '%s\n' "$backup_output" | sed -n 's/^backup created: //p')
 assert_file "$backup_path"
 
 rm -f "$TEST_CONFIG_PATH"
+unmount_if_mounted "$TEST_INSECURE_DIR"
 rm -rf "$TEST_SECURE_DIR" "$TEST_INSECURE_DIR" "$TEST_HOME/docs" "$TEST_HOME/.aws"
-mkdir -p "$TEST_SECURE_DIR"
+mkdir -p "$TEST_SECURE_DIR" "$TEST_INSECURE_DIR"
 cp "$backup_path" "$TEST_SECURE_DIR/"
 restored_backup="$TEST_SECURE_DIR/$(basename "$backup_path")"
 assert_path_exists_only "$restored_backup" "backup archive"
 
 lk restore "$restored_backup"
-mkdir -p "$TEST_INSECURE_DIR"
 lk unseal
 list_after_restore="$(lk_capture list)"
 printf '%s\n' "$list_after_restore"

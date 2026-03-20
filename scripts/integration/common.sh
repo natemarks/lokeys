@@ -47,18 +47,34 @@ create_temp_layout() {
 }
 
 cleanup_layout() {
-	if command -v mountpoint >/dev/null 2>&1; then
-		if [ -n "${TEST_INSECURE_DIR:-}" ] && mountpoint -q "$TEST_INSECURE_DIR"; then
-			umount "$TEST_INSECURE_DIR" 2>/dev/null || true
-			umount -l "$TEST_INSECURE_DIR" 2>/dev/null || true
-			sudo -n umount "$TEST_INSECURE_DIR" 2>/dev/null || true
-			sudo -n umount -l "$TEST_INSECURE_DIR" 2>/dev/null || true
-		fi
-	fi
+	unmount_if_mounted "${TEST_INSECURE_DIR:-}"
 	if [ -n "${TEST_ROOT:-}" ] && [ -d "$TEST_ROOT" ]; then
 		chmod -R u+w "$TEST_ROOT" 2>/dev/null || true
 		rm -rf "$TEST_ROOT" || true
 	fi
+}
+
+unmount_if_mounted() {
+	local path="$1"
+	[ -n "$path" ] || return 0
+	if command -v mountpoint >/dev/null 2>&1 && mountpoint -q "$path"; then
+		log_info "unmounting: $path"
+		umount "$path" 2>/dev/null || true
+		umount -l "$path" 2>/dev/null || true
+		sudo -n umount "$path" 2>/dev/null || true
+		sudo -n umount -l "$path" 2>/dev/null || true
+	fi
+}
+
+clear_directory_contents() {
+	local dir="$1"
+	mkdir -p "$dir"
+	shopt -s dotglob nullglob
+	local entries=("$dir"/*)
+	if [ ${#entries[@]} -gt 0 ]; then
+		rm -rf "${entries[@]}"
+	fi
+	shopt -u dotglob nullglob
 }
 
 lk() {
