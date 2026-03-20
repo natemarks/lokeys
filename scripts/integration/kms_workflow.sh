@@ -46,6 +46,7 @@ log_step "Initializing KMS workflow test layout"
 mkdir -p "$TEST_HOME/docs" "$TEST_HOME/.aws"
 printf 'kms-alpha\n' >"$TEST_HOME/docs/a.txt"
 printf '[default]\nregion=us-east-1\n' >"$TEST_HOME/.aws/config"
+printf '[default]\naws_access_key_id=AKIAFAKE\naws_secret_access_key=FAKE\n' >"$TEST_HOME/.aws/credentials"
 set_random_session_key
 
 log_step "Bootstrapping lokeys config and mount"
@@ -61,21 +62,24 @@ fi
 lk "${enable_args[@]}"
 
 log_step "Protecting KMS-managed and bypassed files"
-# docs/a.txt should use KMS envelope; ~/.aws/config is explicitly bypassed to
-# avoid credential bootstrap loops.
+# docs/a.txt should use KMS envelope; ~/.aws/config and ~/.aws/credentials are
+# auto-bypassed to avoid credential bootstrap loops.
 lk add "$TEST_HOME/docs/a.txt"
-lk add --allow-kms-bypass "$TEST_HOME/.aws/config"
+lk add "$TEST_HOME/.aws/config"
+lk add "$TEST_HOME/.aws/credentials"
 
 log_step "Editing, sealing, and validating consistency"
 # Edit volatile plaintext, seal to secure storage, and validate both policy paths:
-# one KMS-managed file and one local-only bypass file.
+# one KMS-managed file and two local-only bypass files.
 printf 'kms-alpha-edited\n' >"$TEST_INSECURE_DIR/docs/a.txt"
 printf '[default]\nregion=us-west-2\n' >"$TEST_INSECURE_DIR/.aws/config"
+printf '[default]\naws_access_key_id=AKIAFAKE2\naws_secret_access_key=FAKE2\n' >"$TEST_INSECURE_DIR/.aws/credentials"
 lk seal
 list_after_seal="$(lk_capture list)"
 printf '%s\n' "$list_after_seal"
 assert_list_status "$list_after_seal" "\$HOME/docs/a.txt" 'OK'
 assert_list_status "$list_after_seal" "\$HOME/.aws/config" 'OK'
+assert_list_status "$list_after_seal" "\$HOME/.aws/credentials" 'OK'
 
 log_step "Simulating reboot and validating unseal links"
 # Simulate reboot by clearing volatile insecure data only, then recover from secure.
@@ -83,8 +87,10 @@ clear_directory_contents "$TEST_INSECURE_DIR"
 lk unseal
 assert_file "$TEST_INSECURE_DIR/docs/a.txt"
 assert_file "$TEST_INSECURE_DIR/.aws/config"
+assert_file "$TEST_INSECURE_DIR/.aws/credentials"
 assert_symlink_target "$TEST_HOME/docs/a.txt" "$TEST_INSECURE_DIR/docs/a.txt"
 assert_symlink_target "$TEST_HOME/.aws/config" "$TEST_INSECURE_DIR/.aws/config"
+assert_symlink_target "$TEST_HOME/.aws/credentials" "$TEST_INSECURE_DIR/.aws/credentials"
 
 log_step "Rotating symmetric key and re-validating"
 # Rotate local symmetric key while preserving KMS policy split.
@@ -104,6 +110,7 @@ list_after_rotate="$(lk_capture list)"
 printf '%s\n' "$list_after_rotate"
 assert_list_status "$list_after_rotate" "\$HOME/docs/a.txt" 'OK'
 assert_list_status "$list_after_rotate" "\$HOME/.aws/config" 'OK'
+assert_list_status "$list_after_rotate" "\$HOME/.aws/credentials" 'OK'
 
 log_step "Testing backup and restore with KMS"
 # Backup encrypted artifacts/config, wipe runtime state, restore archive,
@@ -133,5 +140,6 @@ list_after_restore="$(lk_capture list)"
 printf '%s\n' "$list_after_restore"
 assert_list_status "$list_after_restore" "\$HOME/docs/a.txt" 'OK'
 assert_list_status "$list_after_restore" "\$HOME/.aws/config" 'OK'
+assert_list_status "$list_after_restore" "\$HOME/.aws/credentials" 'OK'
 
 printf '\nKMS workflow integration test: PASS\n'

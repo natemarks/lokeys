@@ -525,6 +525,68 @@ Expected:
 - Restore writes encrypted files back to `~/.lokeys/secure`.
 - Restore ensures RAM-disk mount path exists, but does not auto-unseal files.
 
+### 12) AWS default credential files auto-bypass KMS
+
+Goal: Verify `~/.aws/config` and `~/.aws/credentials` bypass KMS automatically
+when KMS mode is enabled.
+
+Steps:
+
+1. Enable KMS:
+
+   ```bash
+   $LOKEYS enable-kms --apply
+   ```
+
+2. Create AWS default files:
+
+   ```bash
+   mkdir -p "$HOME/.aws"
+   printf '[default]\nregion=us-east-1\n' > "$HOME/.aws/config"
+   printf '[default]\naws_access_key_id=AKIAFAKE\naws_secret_access_key=FAKE\n' > "$HOME/.aws/credentials"
+   ```
+
+3. Add both files without bypass flags:
+
+   ```bash
+   $LOKEYS add "$HOME/.aws/config"
+   $LOKEYS add "$HOME/.aws/credentials"
+   ```
+
+4. Seal + unseal:
+
+   ```bash
+   $LOKEYS seal
+   sudo umount "$HOME/.lokeys/insecure"
+   $LOKEYS unseal
+   ```
+
+Expected:
+
+- Both `add` commands succeed without `--allow-kms-bypass`
+- `seal` succeeds without `--allow-kms-bypass-file`
+- `unseal` succeeds even when KMS is unavailable, as long as only default AWS
+  files are protected
+
+### 13) Non-default `~/.aws/*` files still require explicit bypass
+
+Goal: Verify fail-closed behavior remains for non-default AWS paths.
+
+Steps:
+
+```bash
+mkdir -p "$HOME/.aws/sso/cache"
+printf '{"accessToken":"test"}\n' > "$HOME/.aws/sso/cache/token.json"
+$LOKEYS add "$HOME/.aws/sso/cache/token.json"
+echo $?
+$LOKEYS add --allow-kms-bypass "$HOME/.aws/sso/cache/token.json"
+```
+
+Expected:
+
+- First add fails with dependency-loop / explicit bypass guidance
+- Second add succeeds with explicit bypass flag
+
 ## Automated Test Coverage (New)
 
 The codebase now includes expanded automated tests focused on isolated,
@@ -546,7 +608,11 @@ readable validation of core logic and command wiring.
 - `internal/lokeys/operations_test.go`
   - Covers add/seal command orchestration through `Service` methods with temp
     HOME fixtures and injected mount/key boundaries.
-  - Verifies conflict fail-fast behavior and no partial state mutation.
+  - Verifies conflict fail-fast behavior, AWS auto-bypass behavior for default
+    credential files, and no partial state mutation.
+- `internal/lokeys/kms_policy_test.go`
+  - Covers KMS policy selection for AWS auto-bypass defaults versus non-default
+    `.aws/*` paths.
 - `internal/lokeys/list_operation_test.go`
   - Covers list reporting for externally created untracked RAM-disk files.
 - `internal/lokeys/backup_operation_test.go`
@@ -609,6 +675,14 @@ readable validation of core logic and command wiring.
   - `TestRunAddFailsWhenDerivedHomePathExists`: verifies add conflict guard on derived home path collisions.
   - `TestRunSealDiscoversAndProtectsRamdiskFiles`: verifies seal discovery enrolls untracked RAM files.
   - `TestRunSealFailsFastOnFirstConflict`: verifies seal aborts on first conflict without partial enrollment.
+  - `TestRunAdd_AWSCredentialsAutoBypassWithoutFlag`: verifies default AWS credentials path bypasses KMS automatically.
+  - `TestRunAdd_AWSNonDefaultPathStillRequiresExplicitBypass`: verifies non-default AWS paths stay fail-closed unless explicitly bypassed.
+  - `TestRunSeal_AWSDefaultsDiscoveryAutoBypass`: verifies seal discovery auto-bypasses default AWS config/credentials.
+  - `TestRunSeal_AWSNonDefaultDiscoveryStillNeedsExplicitBypass`: verifies non-default discovered AWS paths require explicit bypass.
+  - `TestRunUnseal_AWSDefaultsDoNotRequireKMSHealthCheck`: verifies unseal does not require KMS readiness for default AWS auto-bypass files.
+- `internal/lokeys/kms_policy_test.go`
+  - `TestShouldUseKMSForPortable_AWSDefaultsAutoBypass`: verifies policy auto-bypasses only default AWS config/credentials paths.
+  - `TestShouldUseKMSForPortable_NonDefaultAWSPathStillRequiresBypass`: verifies non-default AWS paths still default to KMS.
 - `internal/lokeys/list_operation_test.go`
   - `TestRunList_ShowsExternallyCreatedInsecureFileAsUntracked`: verifies list reports untracked insecure files with `UNTRACKED_INSECURE` status.
 - `internal/lokeys/backup_operation_test.go`

@@ -48,7 +48,16 @@ func shouldUseKMSForPortable(cfg *config, portable string) bool {
 	if !enabled {
 		return false
 	}
+	if isAWSAutoBypassPortable(portable) {
+		return false
+	}
 	return !cfg.isKMSBypassedPortable(portable)
+}
+
+func isAWSAutoBypassPortable(portable string) bool {
+	configPortable := filepath.Join("$HOME", ".aws", "config")
+	credentialsPortable := filepath.Join("$HOME", ".aws", "credentials")
+	return portable == configPortable || portable == credentialsPortable
 }
 
 func isAWSCredentialPortablePath(portable string) bool {

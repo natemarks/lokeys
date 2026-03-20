@@ -362,10 +362,16 @@ If you need a specific AWS profile:
 lokeys enable-kms --profile default --apply
 ```
 
-4. Protect AWS credentials with explicit per-file bypass:
+4. Protect AWS credentials (auto-bypassed):
 
 ```bash
-lokeys add --allow-kms-bypass ~/.aws/credentials
+lokeys add ~/.aws/credentials
+```
+
+Optional: protect AWS config the same way (also auto-bypassed):
+
+```bash
+lokeys add ~/.aws/config
 ```
 
 5. Protect SSH key with KMS envelope enabled:
@@ -382,7 +388,7 @@ lokeys list
 
 **What lokeys does in the background**
 - configures `kms` in `~/.config/lokeys`
-- encrypts `~/.aws/credentials` with local key only (explicit bypass)
+- encrypts `~/.aws/credentials` and `~/.aws/config` with local key only (automatic bypass)
 - encrypts `~/.ssh/id_rsa` with local key + KMS envelope
 - fails closed if KMS is required but unavailable
 
@@ -477,25 +483,35 @@ lokeys list
 - restores encrypted files to `~/.lokeys/secure`
 - restores config to `~/.config/lokeys`
 - mounts RAM disk and then `unseal` reconstructs decrypted symlinked working files
-- uses AWS credentials to access KMS for KMS-managed files during decrypt
+- uses AWS credentials to access KMS only for KMS-managed files during decrypt
+- auto-bypassed AWS defaults (`~/.aws/config`, `~/.aws/credentials`) decrypt locally without KMS
 
 ---
 
 ## Notes on `~/.aws/*` with KMS
 
-When KMS mode is enabled, `~/.aws/*` files are blocked by default because they
-can be required to authenticate KMS calls.
+When KMS mode is enabled, lokeys treats AWS credential bootstrap files as
+automatic local-envelope bypasses to avoid auth dependency loops.
+
+Auto-bypassed files:
+
+- `~/.aws/config`
+- `~/.aws/credentials`
+
+These files do not require `--allow-kms-bypass` / `--allow-kms-bypass-file`.
+
+Other `~/.aws/*` files still fail closed unless explicitly bypassed.
 
 - single-file add bypass:
 
 ```bash
-lokeys add --allow-kms-bypass ~/.aws/credentials
+lokeys add --allow-kms-bypass ~/.aws/sso/cache/token.json
 ```
 
 - discovered-file seal bypass (repeat per file):
 
 ```bash
-lokeys seal --allow-kms-bypass-file '$HOME/.aws/config'
+lokeys seal --allow-kms-bypass-file '$HOME/.aws/sso/cache/token.json'
 ```
 
 Bypass is file-scoped, explicit, and does not apply to other files.
@@ -524,8 +540,8 @@ make integration-workflows-local
 
 ### KMS workflow group
 
-Runs the same lifecycle with AWS KMS enabled, plus explicit `.aws/*` bypass
-validation.
+Runs the same lifecycle with AWS KMS enabled, including automatic bypass
+validation for `~/.aws/config` and `~/.aws/credentials`.
 
 Required environment:
 

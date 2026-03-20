@@ -18,7 +18,7 @@ func (*addCommand) Usage() string {
 	return "add <path>\n\tAdd file to protected set and replace with RAM-disk symlink.\n"
 }
 func (c *addCommand) SetFlags(fs *flag.FlagSet) {
-	fs.BoolVar(&c.allowKMSBypass, "allow-kms-bypass", false, "allow bypassing KMS envelope for this one $HOME/.aws/* file")
+	fs.BoolVar(&c.allowKMSBypass, "allow-kms-bypass", false, "allow bypassing KMS envelope for this one non-default $HOME/.aws/* file (config and credentials auto-bypass)")
 }
 func (c *addCommand) Execute(_ context.Context, f *flag.FlagSet, _ ...interface{}) subcommands.ExitStatus {
 	return runWithExitStatus(runAdd(f.Args(), c.allowKMSBypass))

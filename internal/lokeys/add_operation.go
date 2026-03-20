@@ -103,7 +103,7 @@ func planAdd(paths appPaths, cfg *config, tracked trackedFile, sourcePath string
 	}
 	updated.KMSBypassFiles = append([]string{}, cfg.KMSBypassFiles...)
 	updated.ProtectedFiles = append(updated.ProtectedFiles, tracked.Portable)
-	if opts.AllowKMSBypass {
+	if opts.AllowKMSBypass || isAWSAutoBypassPortable(tracked.Portable) {
 		updated.KMSBypassFiles = appendUnique(updated.KMSBypassFiles, tracked.Portable)
 	}
 	useKMS := shouldUseKMSForPortable(cfg, tracked.Portable)

@@ -92,6 +92,9 @@ func (s *Service) sealTrackedAndDiscovered(cfg *config, paths appPaths, key []by
 				requiresKMS = true
 				continue
 			}
+			if isAWSAutoBypassPortable(tf.Portable) {
+				continue
+			}
 			if _, ok := allowBypass[tf.Portable]; ok {
 				continue
 			}
@@ -134,7 +137,8 @@ func planSeal(paths appPaths, cfg *config, tracked []trackedFile, discovered []t
 			updated.KMS = &kms
 		}
 		for _, tf := range discovered {
-			_, bypassed := allowBypass[tf.Portable]
+			_, bypassedByFlag := allowBypass[tf.Portable]
+			bypassed := bypassedByFlag || isAWSAutoBypassPortable(tf.Portable)
 			if bypassed {
 				updated.KMSBypassFiles = appendUnique(updated.KMSBypassFiles, tf.Portable)
 			}

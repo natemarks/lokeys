@@ -19,7 +19,7 @@ func (*sealCommand) Usage() string {
 	return "seal\n\tEncrypt all protected RAM-disk files into secure storage.\n"
 }
 func (c *sealCommand) SetFlags(fs *flag.FlagSet) {
-	fs.Var(&c.allowKMSBypassFiles, "allow-kms-bypass-file", "portable or absolute path for a single discovered $HOME/.aws/* file to bypass KMS; repeatable")
+	fs.Var(&c.allowKMSBypassFiles, "allow-kms-bypass-file", "portable or absolute path for a discovered non-default $HOME/.aws/* file to bypass KMS; repeatable (config and credentials auto-bypass)")
 }
 func (c *sealCommand) Execute(_ context.Context, f *flag.FlagSet, _ ...interface{}) subcommands.ExitStatus {
 	return runWithExitStatus(runSeal(f.Args(), c.allowKMSBypassFiles.values()))
