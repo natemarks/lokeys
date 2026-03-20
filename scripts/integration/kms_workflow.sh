@@ -9,6 +9,28 @@ require_tty
 
 [ -n "${AWS_PROFILE:-}" ] || fail "AWS_PROFILE is required"
 
+original_home="$HOME"
+
+if command -v aws >/dev/null 2>&1; then
+	if [ -z "${AWS_ACCESS_KEY_ID:-}" ]; then
+		if creds_env="$(aws configure export-credentials --profile "$AWS_PROFILE" --format env 2>/dev/null)"; then
+			eval "$creds_env"
+			log_info "loaded AWS session credentials from profile before HOME override"
+		fi
+	fi
+	aws sts get-caller-identity --profile "$AWS_PROFILE" >/dev/null
+else
+	fail "aws CLI is required for KMS integration workflow preflight"
+fi
+
+export AWS_EC2_METADATA_DISABLED=true
+if [ -z "${AWS_SHARED_CREDENTIALS_FILE:-}" ] && [ -f "$original_home/.aws/credentials" ]; then
+	export AWS_SHARED_CREDENTIALS_FILE="$original_home/.aws/credentials"
+fi
+if [ -z "${AWS_CONFIG_FILE:-}" ] && [ -f "$original_home/.aws/config" ]; then
+	export AWS_CONFIG_FILE="$original_home/.aws/config"
+fi
+
 create_temp_layout
 trap cleanup_layout EXIT
 log_layout
