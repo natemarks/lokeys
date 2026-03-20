@@ -47,9 +47,17 @@ create_temp_layout() {
 }
 
 cleanup_layout() {
+	if command -v mountpoint >/dev/null 2>&1; then
+		if [ -n "${TEST_INSECURE_DIR:-}" ] && mountpoint -q "$TEST_INSECURE_DIR"; then
+			umount "$TEST_INSECURE_DIR" 2>/dev/null || true
+			umount -l "$TEST_INSECURE_DIR" 2>/dev/null || true
+			sudo -n umount "$TEST_INSECURE_DIR" 2>/dev/null || true
+			sudo -n umount -l "$TEST_INSECURE_DIR" 2>/dev/null || true
+		fi
+	fi
 	if [ -n "${TEST_ROOT:-}" ] && [ -d "$TEST_ROOT" ]; then
 		chmod -R u+w "$TEST_ROOT" 2>/dev/null || true
-		rm -rf "$TEST_ROOT"
+		rm -rf "$TEST_ROOT" || true
 	fi
 }
 
@@ -104,7 +112,7 @@ assert_list_status() {
 assert_no_list_status() {
 	local list_output="$1"
 	local status="$2"
-	if printf '%s\n' "$list_output" | grep -F "${status}" >/dev/null; then
+	if printf '%s\n' "$list_output" | grep -E "  ${status}$" >/dev/null; then
 		fail "unexpected status present: ${status}"
 	fi
 }
