@@ -57,6 +57,9 @@ git push origin v0.1.0
 make release-dry-run RELEASE_TAG=v0.1.0
 ```
 
+`release-dry-run` does not require a local git tag, but still requires a
+semver-formatted `RELEASE_TAG` value for artifact naming.
+
 Artifacts will be created under:
 
 `dist/release/v0.1.0`
