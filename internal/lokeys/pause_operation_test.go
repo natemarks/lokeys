@@ -100,3 +100,60 @@ func TestRunPauseAndRunUnpause_NonManagedPathReturnsSuccess(t *testing.T) {
 		t.Fatalf("expected not-protected message, got %q", out.String())
 	}
 }
+
+func TestRunPauseAndUnpause_AreIdempotent(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	if _, _, err := ensureConfig(); err != nil {
+		t.Fatalf("ensure config: %v", err)
+	}
+	portable := "$HOME/docs/idempotent.txt"
+	if err := writeConfig(&config{ProtectedFiles: []protectedFile{{Path: portable, Paused: false}}}); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	var out bytes.Buffer
+	svc := NewService(Deps{Stdout: &out, Stderr: io.Discard, Mounter: testMounter{}, Keys: testKeySource{}})
+	pathArg := filepath.Join(home, "docs", "idempotent.txt")
+
+	if err := svc.RunPause(pathArg); err != nil {
+		t.Fatalf("first RunPause: %v", err)
+	}
+	if err := svc.RunPause(pathArg); err != nil {
+		t.Fatalf("second RunPause: %v", err)
+	}
+
+	cfgAfterPause, err := readConfig(filepath.Join(home, configFileRel))
+	if err != nil {
+		t.Fatalf("read config after pause: %v", err)
+	}
+	idx := cfgAfterPause.protectedFileIndex(portable)
+	if idx == -1 || !cfgAfterPause.ProtectedFiles[idx].Paused {
+		t.Fatalf("expected paused=true after idempotent pause calls, got %#v", cfgAfterPause.ProtectedFiles)
+	}
+
+	if err := svc.RunUnpause(pathArg); err != nil {
+		t.Fatalf("first RunUnpause: %v", err)
+	}
+	if err := svc.RunUnpause(pathArg); err != nil {
+		t.Fatalf("second RunUnpause: %v", err)
+	}
+
+	cfgAfterUnpause, err := readConfig(filepath.Join(home, configFileRel))
+	if err != nil {
+		t.Fatalf("read config after unpause: %v", err)
+	}
+	idx = cfgAfterUnpause.protectedFileIndex(portable)
+	if idx == -1 || cfgAfterUnpause.ProtectedFiles[idx].Paused {
+		t.Fatalf("expected paused=false after idempotent unpause calls, got %#v", cfgAfterUnpause.ProtectedFiles)
+	}
+
+	outStr := out.String()
+	if !strings.Contains(outStr, portable+" already paused.") {
+		t.Fatalf("expected already-paused message, got %q", outStr)
+	}
+	if !strings.Contains(outStr, portable+" already unpaused.") {
+		t.Fatalf("expected already-unpaused message, got %q", outStr)
+	}
+}

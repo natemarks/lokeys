@@ -71,3 +71,30 @@ func TestReadConfig_LegacyProtectedFilesArrayMigratesToEntries(t *testing.T) {
 		t.Fatalf("expected paused=false migration defaults, got %#v", got.ProtectedFiles)
 	}
 }
+
+func TestWriteAndReadConfig_PreservesPausedFlagsInNewFormat(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "lokeys.json")
+
+	want := &config{ProtectedFiles: []protectedFile{
+		{Path: "$HOME/paused.txt", Paused: true},
+		{Path: "$HOME/active.txt", Paused: false},
+	}}
+	if err := writeConfigTo(path, want); err != nil {
+		t.Fatalf("writeConfigTo: %v", err)
+	}
+
+	got, err := readConfig(path)
+	if err != nil {
+		t.Fatalf("readConfig: %v", err)
+	}
+	if len(got.ProtectedFiles) != 2 {
+		t.Fatalf("unexpected protected file count: %#v", got.ProtectedFiles)
+	}
+	if got.ProtectedFiles[0].Path != "$HOME/paused.txt" || !got.ProtectedFiles[0].Paused {
+		t.Fatalf("expected first entry paused, got %#v", got.ProtectedFiles[0])
+	}
+	if got.ProtectedFiles[1].Path != "$HOME/active.txt" || got.ProtectedFiles[1].Paused {
+		t.Fatalf("expected second entry unpaused, got %#v", got.ProtectedFiles[1])
+	}
+}
