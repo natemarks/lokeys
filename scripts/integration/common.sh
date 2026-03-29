@@ -125,6 +125,20 @@ assert_list_status() {
 	printf '%s\n' "$list_output" | grep -F "${portable_path}  " | grep -F "${status}" >/dev/null || fail "expected status ${status} for ${portable_path}"
 }
 
+assert_list_paused() {
+	local list_output="$1"
+	local portable_path="$2"
+	printf '%s\n' "$list_output" | grep -F "${portable_path}  " | grep -F 'PAUSED' >/dev/null || fail "expected PAUSED marker for ${portable_path}"
+}
+
+assert_list_not_paused() {
+	local list_output="$1"
+	local portable_path="$2"
+	if printf '%s\n' "$list_output" | grep -F "${portable_path}  " | grep -F 'PAUSED' >/dev/null; then
+		fail "did not expect PAUSED marker for ${portable_path}"
+	fi
+}
+
 assert_no_list_status() {
 	local list_output="$1"
 	local status="$2"
