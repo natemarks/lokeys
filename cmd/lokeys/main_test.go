@@ -37,6 +37,21 @@ func TestRequireOneArg_ReturnsUsageErrorOnZeroOrMany(t *testing.T) {
 	}
 }
 
+func TestRunPauseAndUnpause_EnforceSingleArgUsage(t *testing.T) {
+	if err := runPause([]string{}); err == nil || !errors.Is(err, errUsage) {
+		t.Fatalf("expected pause usage error for zero args, got %v", err)
+	}
+	if err := runPause([]string{"a", "b"}); err == nil || !errors.Is(err, errUsage) {
+		t.Fatalf("expected pause usage error for many args, got %v", err)
+	}
+	if err := runUnpause([]string{}); err == nil || !errors.Is(err, errUsage) {
+		t.Fatalf("expected unpause usage error for zero args, got %v", err)
+	}
+	if err := runUnpause([]string{"a", "b"}); err == nil || !errors.Is(err, errUsage) {
+		t.Fatalf("expected unpause usage error for many args, got %v", err)
+	}
+}
+
 // TestRequireZeroOrOneArg_ReturnsUsageErrorOnMany verifies optional single-arg
 // commands reject argument lists longer than one.
 func TestRequireZeroOrOneArg_ReturnsUsageErrorOnMany(t *testing.T) {
