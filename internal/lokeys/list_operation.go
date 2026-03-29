@@ -146,7 +146,12 @@ func (s *Service) RunList() error {
 			status = statusMismatch
 		}
 
-		fmt.Fprintf(out, "%s  insecure=%s  secure=%s  %s\n", portable, hashOrMissing(insecureHash), hashOrMissing(secureHash), status)
+		pausedSuffix := ""
+		if entry.Paused {
+			pausedSuffix = "  PAUSED"
+		}
+
+		fmt.Fprintf(out, "%s  insecure=%s  secure=%s  %s%s\n", portable, hashOrMissing(insecureHash), hashOrMissing(secureHash), status, pausedSuffix)
 	}
 
 	for _, tracked := range untracked {
