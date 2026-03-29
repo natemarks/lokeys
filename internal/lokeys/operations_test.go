@@ -64,7 +64,7 @@ func TestRunAddProtectsRamdiskCreatedFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read config: %v", err)
 	}
-	if !containsProtectedPath(cfg.ProtectedFiles, "$HOME/notes/new.txt") {
+	if !cfg.hasProtectedFile("$HOME/notes/new.txt") {
 		t.Fatalf("missing protected file entry: %#v", cfg.ProtectedFiles)
 	}
 }
@@ -152,7 +152,7 @@ func TestRunSealDiscoversAndProtectsRamdiskFiles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read config: %v", err)
 	}
-	if !containsProtectedPath(cfg.ProtectedFiles, "$HOME/notes/seal-new.txt") {
+	if !cfg.hasProtectedFile("$HOME/notes/seal-new.txt") {
 		t.Fatalf("missing protected file entry: %#v", cfg.ProtectedFiles)
 	}
 }

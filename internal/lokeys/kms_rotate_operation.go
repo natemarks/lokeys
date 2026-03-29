@@ -109,7 +109,7 @@ func (s *Service) RunKMSRotate(opts KMSRotateOptions) (string, int, error) {
 		return backupPath, rotated, err
 	}
 
-	newCfg := &config{ProtectedFiles: cloneProtectedFiles(updatedCfg.ProtectedFiles), KMSBypassFiles: append([]string{}, updatedCfg.KMSBypassFiles...)}
+	newCfg := &config{ProtectedFiles: updatedCfg.protectedFileEntries(), KMSBypassFiles: append([]string{}, updatedCfg.KMSBypassFiles...)}
 	if updatedCfg.KMS != nil {
 		kmsCopy := *updatedCfg.KMS
 		newCfg.KMS = &kmsCopy

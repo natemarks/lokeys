@@ -262,7 +262,7 @@ func TestRunRotate_EnrollsAndRotatesDiscoveredInsecureFiles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read config: %v", err)
 	}
-	if !containsProtectedPath(cfg.ProtectedFiles, "$HOME/external-rotate/new.txt") {
+	if !cfg.hasProtectedFile("$HOME/external-rotate/new.txt") {
 		t.Fatalf("expected discovered file enrollment, got %#v", cfg.ProtectedFiles)
 	}
 

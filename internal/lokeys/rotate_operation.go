@@ -28,7 +28,7 @@ func (s *Service) RunRotate() (string, int, error) {
 	if err := s.validateKeyForExistingProtectedFiles(cfg, oldKey); err != nil {
 		return "", 0, err
 	}
-	if anyPortableRequiresKMS(cfg, protectedPaths(cfg.ProtectedFiles)) {
+	if anyPortableRequiresKMS(cfg, cfg.protectedFilePaths()) {
 		if err := ensureKMSReady(cfg); err != nil {
 			return "", 0, err
 		}
