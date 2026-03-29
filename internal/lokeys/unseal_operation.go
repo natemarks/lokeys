@@ -29,6 +29,9 @@ func (s *Service) RunUnseal() error {
 
 	tracked := make([]trackedFile, 0, len(cfg.ProtectedFiles))
 	for _, entry := range cfg.ProtectedFiles {
+		if entry.Paused {
+			continue
+		}
 		portable := entry.Path
 		tf, err := buildTrackedFileFromPortable(paths.Home, paths.SecureDir, paths.InsecureDir, portable)
 		if err != nil {

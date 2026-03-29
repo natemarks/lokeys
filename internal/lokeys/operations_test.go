@@ -503,6 +503,99 @@ func TestRunUnseal_AWSDefaultsDecryptBeforeKMSFailure(t *testing.T) {
 	}
 }
 
+// TestRunUnseal_SkipsPausedFiles verifies paused entries are not extracted,
+// while unpaused entries are restored as normal in the same unseal run.
+func TestRunUnseal_SkipsPausedFiles(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	key, encoded := mustEncodedSessionKey(t)
+	t.Setenv(SessionKeyEnv, encoded)
+
+	pausedPortable := "$HOME/docs/paused.txt"
+	unpausedPortable := "$HOME/docs/unpaused.txt"
+
+	pausedSecure := filepath.Join(home, defaultEncryptedRel, "docs", "paused.txt")
+	unpausedSecure := filepath.Join(home, defaultEncryptedRel, "docs", "unpaused.txt")
+	if err := os.MkdirAll(filepath.Dir(pausedSecure), dirPerm); err != nil {
+		t.Fatalf("mkdir secure dir: %v", err)
+	}
+
+	pausedCiphertext, err := encryptBytes([]byte("paused-secret\n"), key)
+	if err != nil {
+		t.Fatalf("encrypt paused file: %v", err)
+	}
+	if err := os.WriteFile(pausedSecure, pausedCiphertext, 0600); err != nil {
+		t.Fatalf("write paused secure file: %v", err)
+	}
+
+	unpausedCiphertext, err := encryptBytes([]byte("unpaused-secret\n"), key)
+	if err != nil {
+		t.Fatalf("encrypt unpaused file: %v", err)
+	}
+	if err := os.WriteFile(unpausedSecure, unpausedCiphertext, 0600); err != nil {
+		t.Fatalf("write unpaused secure file: %v", err)
+	}
+
+	pausedHome := filepath.Join(home, "docs", "paused.txt")
+	unpausedHome := filepath.Join(home, "docs", "unpaused.txt")
+	if err := os.MkdirAll(filepath.Dir(pausedHome), dirPerm); err != nil {
+		t.Fatalf("mkdir home dir: %v", err)
+	}
+	if err := os.WriteFile(pausedHome, []byte("keep-local\n"), 0600); err != nil {
+		t.Fatalf("write paused home file: %v", err)
+	}
+	if err := os.WriteFile(unpausedHome, []byte("replace-me\n"), 0600); err != nil {
+		t.Fatalf("write unpaused home file: %v", err)
+	}
+	if _, _, err := ensureConfig(); err != nil {
+		t.Fatalf("ensure config: %v", err)
+	}
+
+	if err := writeConfig(&config{ProtectedFiles: []protectedFile{
+		{Path: pausedPortable, Paused: true},
+		{Path: unpausedPortable, Paused: false},
+	}}); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	svc := newTestService()
+	if err := svc.RunUnseal(); err != nil {
+		t.Fatalf("RunUnseal failed: %v", err)
+	}
+
+	pausedInsecure := filepath.Join(home, defaultDecryptedRel, "docs", "paused.txt")
+	if fileExists(pausedInsecure) {
+		t.Fatalf("expected paused file to remain absent in insecure dir")
+	}
+	pausedInfo, err := os.Lstat(pausedHome)
+	if err != nil {
+		t.Fatalf("lstat paused home path: %v", err)
+	}
+	if pausedInfo.Mode()&os.ModeSymlink != 0 {
+		t.Fatalf("expected paused home path to remain regular file")
+	}
+
+	unpausedInsecure := filepath.Join(home, defaultDecryptedRel, "docs", "unpaused.txt")
+	if !fileExists(unpausedInsecure) {
+		t.Fatalf("expected unpaused file in insecure dir")
+	}
+	unsealedBytes, err := os.ReadFile(unpausedInsecure)
+	if err != nil {
+		t.Fatalf("read unpaused insecure file: %v", err)
+	}
+	if string(unsealedBytes) != "unpaused-secret\n" {
+		t.Fatalf("unexpected unpaused content: %q", string(unsealedBytes))
+	}
+	unpausedInfo, err := os.Lstat(unpausedHome)
+	if err != nil {
+		t.Fatalf("lstat unpaused home path: %v", err)
+	}
+	if unpausedInfo.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("expected unpaused home path to be replaced with symlink")
+	}
+}
+
 // TestRunAddWithPathOverrides_WritesToOverriddenLocations verifies add respects
 // explicit config/secure/insecure overrides instead of default home-relative
 // directories.
