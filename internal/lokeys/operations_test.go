@@ -223,6 +223,71 @@ func TestRunSealFailsFastOnFirstConflict(t *testing.T) {
 	}
 }
 
+// TestRunSeal_DoesNotFailWhenManagedInsecureMissing verifies seal tolerates
+// managed entries that are absent from RAM-disk and still seals present files.
+func TestRunSeal_DoesNotFailWhenManagedInsecureMissing(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	key, encoded := mustEncodedSessionKey(t)
+	t.Setenv(SessionKeyEnv, encoded)
+
+	presentPortable := "$HOME/docs/present.txt"
+	missingPortable := "$HOME/docs/missing.txt"
+	if _, _, err := ensureConfig(); err != nil {
+		t.Fatalf("ensure config: %v", err)
+	}
+	if err := writeConfig(&config{ProtectedFiles: protectedFilesFromPaths([]string{presentPortable, missingPortable})}); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	presentInsecure := filepath.Join(home, defaultDecryptedRel, "docs", "present.txt")
+	if err := os.MkdirAll(filepath.Dir(presentInsecure), dirPerm); err != nil {
+		t.Fatalf("mkdir present insecure parent: %v", err)
+	}
+	if err := os.WriteFile(presentInsecure, []byte("present-updated\n"), 0600); err != nil {
+		t.Fatalf("write present insecure file: %v", err)
+	}
+
+	missingSecure := filepath.Join(home, defaultEncryptedRel, "docs", "missing.txt")
+	if err := os.MkdirAll(filepath.Dir(missingSecure), dirPerm); err != nil {
+		t.Fatalf("mkdir missing secure parent: %v", err)
+	}
+	originalMissingCiphertext, err := encryptBytes([]byte("missing-original\n"), key)
+	if err != nil {
+		t.Fatalf("encrypt missing secure baseline: %v", err)
+	}
+	if err := os.WriteFile(missingSecure, originalMissingCiphertext, 0600); err != nil {
+		t.Fatalf("write missing secure baseline: %v", err)
+	}
+
+	svc := newTestService()
+	if err := svc.RunSeal(); err != nil {
+		t.Fatalf("RunSeal failed with missing managed insecure file: %v", err)
+	}
+
+	presentSecure := filepath.Join(home, defaultEncryptedRel, "docs", "present.txt")
+	presentCiphertext, err := os.ReadFile(presentSecure)
+	if err != nil {
+		t.Fatalf("read present secure file: %v", err)
+	}
+	presentPlaintext, err := decryptBytes(presentCiphertext, key)
+	if err != nil {
+		t.Fatalf("decrypt present secure file: %v", err)
+	}
+	if string(presentPlaintext) != "present-updated\n" {
+		t.Fatalf("unexpected present secure plaintext: %q", string(presentPlaintext))
+	}
+
+	currentMissingCiphertext, err := os.ReadFile(missingSecure)
+	if err != nil {
+		t.Fatalf("read missing secure file: %v", err)
+	}
+	if string(currentMissingCiphertext) != string(originalMissingCiphertext) {
+		t.Fatalf("expected missing secure file to remain unchanged")
+	}
+}
+
 // TestRunAdd_AWSCredentialsAutoBypassWithoutFlag verifies ~/.aws/credentials
 // is auto-bypassed from KMS when KMS is enabled.
 func TestRunAdd_AWSCredentialsAutoBypassWithoutFlag(t *testing.T) {

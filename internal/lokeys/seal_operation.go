@@ -87,7 +87,16 @@ func (s *Service) sealTrackedAndDiscovered(cfg *config, paths appPaths, key []by
 	}
 	if _, enabled := cfg.kmsRuntimeConfig(); enabled {
 		blocked := []string{}
-		requiresKMS := anyPortableRequiresKMS(cfg, cfg.protectedFilePaths())
+		requiresKMS := false
+		for _, tf := range trackedFiles {
+			if !fileExists(tf.InsecurePath) {
+				continue
+			}
+			if shouldUseKMSForPortable(cfg, tf.Portable) {
+				requiresKMS = true
+				break
+			}
+		}
 		for _, tf := range discovered {
 			if !isAWSCredentialPortablePath(tf.Portable) {
 				requiresKMS = true
@@ -122,6 +131,9 @@ func planSeal(paths appPaths, cfg *config, tracked []trackedFile, discovered []t
 	actions := []action{{Kind: actionEnsureEncryptedDir, Path: paths.SecureDir}}
 	kmsCfg, _ := cfg.kmsRuntimeConfig()
 	for _, tf := range tracked {
+		if !fileExists(tf.InsecurePath) {
+			continue
+		}
 		useKMS := shouldUseKMSForPortable(cfg, tf.Portable)
 		actions = append(actions,
 			action{Kind: actionEnsureParentDir, Path: tf.SecurePath},
