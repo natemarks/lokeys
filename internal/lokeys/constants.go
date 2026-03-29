@@ -32,9 +32,14 @@ const (
 )
 
 type config struct {
-	ProtectedFiles []string   `json:"protectedFiles"`
-	KMS            *kmsConfig `json:"kms,omitempty"`
-	KMSBypassFiles []string   `json:"kmsBypassFiles,omitempty"`
+	ProtectedFiles []protectedFile `json:"protectedFiles"`
+	KMS            *kmsConfig      `json:"kms,omitempty"`
+	KMSBypassFiles []string        `json:"kmsBypassFiles,omitempty"`
+}
+
+type protectedFile struct {
+	Path   string `json:"path"`
+	Paused bool   `json:"paused"`
 }
 
 type kmsConfig struct {

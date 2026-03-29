@@ -29,7 +29,7 @@ func (s *Service) RunRemove(pathArg string) error {
 
 	idx := -1
 	for i, p := range cfg.ProtectedFiles {
-		if p == portable {
+		if p.Path == portable {
 			idx = i
 			break
 		}
@@ -59,7 +59,7 @@ func (s *Service) RunRemove(pathArg string) error {
 }
 
 func planRemove(cfg *config, idx int, tracked trackedFile) plan {
-	updated := &config{ProtectedFiles: append([]string{}, cfg.ProtectedFiles...)}
+	updated := &config{ProtectedFiles: cloneProtectedFiles(cfg.ProtectedFiles)}
 	updated.ProtectedFiles = append(updated.ProtectedFiles[:idx], updated.ProtectedFiles[idx+1:]...)
 	updated.KMSBypassFiles = make([]string, 0, len(cfg.KMSBypassFiles))
 	for _, p := range cfg.KMSBypassFiles {

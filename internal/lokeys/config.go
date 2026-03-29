@@ -7,6 +7,12 @@ import (
 	"path/filepath"
 )
 
+type configJSON struct {
+	ProtectedFiles json.RawMessage `json:"protectedFiles"`
+	KMS            *kmsConfig      `json:"kms,omitempty"`
+	KMSBypassFiles []string        `json:"kmsBypassFiles,omitempty"`
+}
+
 func ensureConfig() (*config, bool, error) {
 	paths, err := resolveAppPaths(PathOverrides{})
 	if err != nil {
@@ -40,7 +46,7 @@ func ensureConfigAt(path string) (*config, bool, error) {
 		return nil, false, err
 	}
 
-	cfg := &config{ProtectedFiles: []string{}}
+	cfg := &config{ProtectedFiles: []protectedFile{}}
 	if err := writeConfigTo(path, cfg); err != nil {
 		return nil, false, err
 	}
@@ -71,11 +77,35 @@ func readConfig(path string) (*config, error) {
 	if err != nil {
 		return nil, err
 	}
-	var cfg config
-	if err := json.Unmarshal(data, &cfg); err != nil {
+	var raw configJSON
+	if err := json.Unmarshal(data, &raw); err != nil {
 		return nil, err
 	}
-	return &cfg, nil
+
+	cfg := &config{
+		KMS:            raw.KMS,
+		KMSBypassFiles: raw.KMSBypassFiles,
+	}
+	if len(raw.ProtectedFiles) == 0 || string(raw.ProtectedFiles) == "null" {
+		cfg.ProtectedFiles = []protectedFile{}
+		return cfg, nil
+	}
+
+	var entries []protectedFile
+	if err := json.Unmarshal(raw.ProtectedFiles, &entries); err == nil {
+		cfg.ProtectedFiles = entries
+		return cfg, nil
+	}
+
+	var legacy []string
+	if err := json.Unmarshal(raw.ProtectedFiles, &legacy); err != nil {
+		return nil, err
+	}
+	cfg.ProtectedFiles = make([]protectedFile, 0, len(legacy))
+	for _, path := range legacy {
+		cfg.ProtectedFiles = append(cfg.ProtectedFiles, protectedFile{Path: path, Paused: false})
+	}
+	return cfg, nil
 }
 
 func writeConfigTo(path string, cfg *config) error {

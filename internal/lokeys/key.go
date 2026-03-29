@@ -92,7 +92,8 @@ func validateKeyForExistingProtectedFilesAt(cfg *config, key []byte, paths appPa
 	secureDir := paths.SecureDir
 	kmsCfg, _ := cfg.kmsRuntimeConfig()
 
-	for _, portable := range cfg.ProtectedFiles {
+	for _, entry := range cfg.ProtectedFiles {
+		portable := entry.Path
 		fullPath, err := expandPortablePath(portable)
 		if err != nil {
 			return err

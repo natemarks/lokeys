@@ -62,7 +62,7 @@ func (s *Service) RunAddWithOptions(pathArg string, opts AddOptions) error {
 		return err
 	}
 
-	if containsString(cfg.ProtectedFiles, tracked.Portable) {
+	if containsProtectedPath(cfg.ProtectedFiles, tracked.Portable) {
 		fmt.Fprintf(s.stdout(), "%s already protected.\n", tracked.Portable)
 		return nil
 	}
@@ -96,13 +96,13 @@ func (s *Service) RunAddWithOptions(pathArg string, opts AddOptions) error {
 }
 
 func planAdd(paths appPaths, cfg *config, tracked trackedFile, sourcePath string, fromInsecure bool, key []byte, opts AddOptions) plan {
-	updated := &config{ProtectedFiles: append([]string{}, cfg.ProtectedFiles...)}
+	updated := &config{ProtectedFiles: cloneProtectedFiles(cfg.ProtectedFiles)}
 	if cfg.KMS != nil {
 		kms := *cfg.KMS
 		updated.KMS = &kms
 	}
 	updated.KMSBypassFiles = append([]string{}, cfg.KMSBypassFiles...)
-	updated.ProtectedFiles = append(updated.ProtectedFiles, tracked.Portable)
+	updated.ProtectedFiles = append(updated.ProtectedFiles, protectedFile{Path: tracked.Portable})
 	if opts.AllowKMSBypass || isAWSAutoBypassPortable(tracked.Portable) {
 		updated.KMSBypassFiles = appendUnique(updated.KMSBypassFiles, tracked.Portable)
 	}

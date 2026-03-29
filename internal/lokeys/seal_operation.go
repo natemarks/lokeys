@@ -61,7 +61,8 @@ func (s *Service) sealTrackedAndDiscovered(cfg *config, paths appPaths, key []by
 	vlogf("seal tracked=%d", len(cfg.ProtectedFiles))
 	trackedRels := make(map[string]struct{}, len(cfg.ProtectedFiles))
 	trackedFiles := make([]trackedFile, 0, len(cfg.ProtectedFiles))
-	for _, portable := range cfg.ProtectedFiles {
+	for _, entry := range cfg.ProtectedFiles {
+		portable := entry.Path
 		tracked, err := buildTrackedFileFromPortable(paths.Home, paths.SecureDir, paths.InsecureDir, portable)
 		if err != nil {
 			return nil, fmt.Errorf("resolve tracked path %s: %w", portable, err)
@@ -86,7 +87,7 @@ func (s *Service) sealTrackedAndDiscovered(cfg *config, paths appPaths, key []by
 	}
 	if _, enabled := cfg.kmsRuntimeConfig(); enabled {
 		blocked := []string{}
-		requiresKMS := anyPortableRequiresKMS(cfg, cfg.ProtectedFiles)
+		requiresKMS := anyPortableRequiresKMS(cfg, protectedPaths(cfg.ProtectedFiles))
 		for _, tf := range discovered {
 			if !isAWSCredentialPortablePath(tf.Portable) {
 				requiresKMS = true
@@ -130,7 +131,7 @@ func planSeal(paths appPaths, cfg *config, tracked []trackedFile, discovered []t
 
 	updated := cfg
 	if len(discovered) > 0 {
-		updated = &config{ProtectedFiles: append([]string{}, cfg.ProtectedFiles...)}
+		updated = &config{ProtectedFiles: cloneProtectedFiles(cfg.ProtectedFiles)}
 		updated.KMSBypassFiles = append([]string{}, cfg.KMSBypassFiles...)
 		if cfg.KMS != nil {
 			kms := *cfg.KMS
@@ -149,7 +150,7 @@ func planSeal(paths appPaths, cfg *config, tracked []trackedFile, discovered []t
 				action{Kind: actionEncryptFile, Source: tf.InsecurePath, Path: tf.SecurePath, Key: key, UseKMS: useKMS, KMS: kmsCfg},
 				action{Kind: actionReplaceWithSymlink, Path: tf.HomePath, Target: tf.InsecurePath},
 			)
-			updated.ProtectedFiles = append(updated.ProtectedFiles, tf.Portable)
+			updated.ProtectedFiles = append(updated.ProtectedFiles, protectedFile{Path: tf.Portable})
 		}
 		actions = append(actions, action{Kind: actionWriteConfig, Config: updated})
 	}

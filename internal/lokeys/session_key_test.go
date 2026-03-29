@@ -42,7 +42,7 @@ func TestRunListFailsFastWithWrongSessionKey(t *testing.T) {
 		t.Fatalf("write secure file: %v", err)
 	}
 
-	cfg := &config{ProtectedFiles: []string{"$HOME/jjj/jjj.txt"}}
+	cfg := &config{ProtectedFiles: protectedFilesFromPaths([]string{"$HOME/jjj/jjj.txt"})}
 	if err := os.MkdirAll(filepath.Join(home, ".config"), dirPerm); err != nil {
 		t.Fatalf("mkdir config dir: %v", err)
 	}

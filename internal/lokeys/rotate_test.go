@@ -42,7 +42,7 @@ func TestRunRotateUsesRamdiskContentAndCreatesTarGzBackup(t *testing.T) {
 	}
 
 	trackedPortable := "$HOME/notes/rotate.txt"
-	if err := writeConfig(&config{ProtectedFiles: []string{trackedPortable}}); err != nil {
+	if err := writeConfig(&config{ProtectedFiles: protectedFilesFromPaths([]string{trackedPortable})}); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 
@@ -134,7 +134,7 @@ func TestRunRotatePromptsOldKeyWhenEnvMissing(t *testing.T) {
 	}
 
 	trackedPortable := "$HOME/notes/prompt.txt"
-	if err := writeConfig(&config{ProtectedFiles: []string{trackedPortable}}); err != nil {
+	if err := writeConfig(&config{ProtectedFiles: protectedFilesFromPaths([]string{trackedPortable})}); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 
@@ -184,7 +184,7 @@ func TestRunRotateRejectsSameOldAndNewKey(t *testing.T) {
 	}
 
 	trackedPortable := "$HOME/notes/same-key.txt"
-	if err := writeConfig(&config{ProtectedFiles: []string{trackedPortable}}); err != nil {
+	if err := writeConfig(&config{ProtectedFiles: protectedFilesFromPaths([]string{trackedPortable})}); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 
@@ -230,7 +230,7 @@ func TestRunRotate_EnrollsAndRotatesDiscoveredInsecureFiles(t *testing.T) {
 	if _, _, err := ensureConfig(); err != nil {
 		t.Fatalf("ensure config: %v", err)
 	}
-	if err := writeConfig(&config{ProtectedFiles: []string{"$HOME/tracked/base.txt"}}); err != nil {
+	if err := writeConfig(&config{ProtectedFiles: protectedFilesFromPaths([]string{"$HOME/tracked/base.txt"})}); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 
@@ -262,7 +262,7 @@ func TestRunRotate_EnrollsAndRotatesDiscoveredInsecureFiles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read config: %v", err)
 	}
-	if !containsString(cfg.ProtectedFiles, "$HOME/external-rotate/new.txt") {
+	if !containsProtectedPath(cfg.ProtectedFiles, "$HOME/external-rotate/new.txt") {
 		t.Fatalf("expected discovered file enrollment, got %#v", cfg.ProtectedFiles)
 	}
 

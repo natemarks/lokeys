@@ -97,3 +97,20 @@ func newTestServiceWithOpts(opts testServiceOpts) *Service {
 
 	return NewService(deps)
 }
+
+func protectedFilesFromPaths(paths []string) []protectedFile {
+	entries := make([]protectedFile, 0, len(paths))
+	for _, path := range paths {
+		entries = append(entries, protectedFile{Path: path})
+	}
+	return entries
+}
+
+func containsString(values []string, value string) bool {
+	for _, item := range values {
+		if item == value {
+			return true
+		}
+	}
+	return false
+}

@@ -109,7 +109,7 @@ func (s *Service) RunKMSRotate(opts KMSRotateOptions) (string, int, error) {
 		return backupPath, rotated, err
 	}
 
-	newCfg := &config{ProtectedFiles: append([]string{}, updatedCfg.ProtectedFiles...), KMSBypassFiles: append([]string{}, updatedCfg.KMSBypassFiles...)}
+	newCfg := &config{ProtectedFiles: cloneProtectedFiles(updatedCfg.ProtectedFiles), KMSBypassFiles: append([]string{}, updatedCfg.KMSBypassFiles...)}
 	if updatedCfg.KMS != nil {
 		kmsCopy := *updatedCfg.KMS
 		newCfg.KMS = &kmsCopy
@@ -133,7 +133,8 @@ func (s *Service) RunKMSRotate(opts KMSRotateOptions) (string, int, error) {
 func buildKMSRotationPlans(cfg *config, paths appPaths, key []byte, sourceProfile string, targetKMSCfg kmsRuntimeConfig) ([]rotationPlan, int, error) {
 	plans := make([]rotationPlan, 0, len(cfg.ProtectedFiles))
 	skipped := 0
-	for _, portable := range cfg.ProtectedFiles {
+	for _, entry := range cfg.ProtectedFiles {
+		portable := entry.Path
 		if !shouldUseKMSForPortable(cfg, portable) {
 			skipped++
 			continue

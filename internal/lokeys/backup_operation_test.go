@@ -44,7 +44,7 @@ func TestRunBackup_EnrollsUntrackedInsecureFilesBeforeArchive(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read config: %v", err)
 	}
-	if !containsString(cfg.ProtectedFiles, "$HOME/backup-new/note.txt") {
+	if !containsProtectedPath(cfg.ProtectedFiles, "$HOME/backup-new/note.txt") {
 		t.Fatalf("expected enrolled config entry, got %#v", cfg.ProtectedFiles)
 	}
 

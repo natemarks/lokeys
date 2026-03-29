@@ -25,7 +25,7 @@ func TestPlanAdd_NewHomeFile_ContainsExpectedActions(t *testing.T) {
 		SecurePath:   filepath.Join(paths.SecureDir, "a.txt"),
 		Rel:          "a.txt",
 	}
-	cfg := &config{ProtectedFiles: []string{}}
+	cfg := &config{ProtectedFiles: []protectedFile{}}
 
 	p := planAdd(paths, cfg, tracked, tracked.HomePath, false, []byte("k"), AddOptions{})
 	if len(p.Actions) < 6 {

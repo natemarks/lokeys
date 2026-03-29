@@ -13,7 +13,8 @@ type rotationPlan struct {
 }
 
 func sealTrackedFromRamdisk(cfg *config, paths appPaths, key []byte) error {
-	for _, portable := range cfg.ProtectedFiles {
+	for _, entry := range cfg.ProtectedFiles {
+		portable := entry.Path
 		tracked, err := buildTrackedFileFromPortable(paths.Home, paths.SecureDir, paths.InsecureDir, portable)
 		if err != nil {
 			return fmt.Errorf("resolve tracked path %s: %w", portable, err)
@@ -37,7 +38,8 @@ func sealTrackedFromRamdisk(cfg *config, paths appPaths, key []byte) error {
 func buildRotationPlans(cfg *config, paths appPaths, oldKey []byte, newKey []byte) ([]rotationPlan, error) {
 	plans := make([]rotationPlan, 0, len(cfg.ProtectedFiles))
 	kmsCfg, _ := cfg.kmsRuntimeConfig()
-	for _, portable := range cfg.ProtectedFiles {
+	for _, entry := range cfg.ProtectedFiles {
+		portable := entry.Path
 		tracked, err := buildTrackedFileFromPortable(paths.Home, paths.SecureDir, paths.InsecureDir, portable)
 		if err != nil {
 			return nil, fmt.Errorf("resolve tracked path %s: %w", portable, err)

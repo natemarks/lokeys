@@ -52,7 +52,8 @@ func (s *Service) RunList() error {
 	}
 
 	needsKey := false
-	for _, portable := range config.ProtectedFiles {
+	for _, entry := range config.ProtectedFiles {
+		portable := entry.Path
 		tracked, err := buildTrackedFileFromPortable(paths.Home, paths.SecureDir, paths.InsecureDir, portable)
 		if err != nil {
 			return fmt.Errorf("resolve tracked path %s: %w", portable, err)
@@ -73,7 +74,7 @@ func (s *Service) RunList() error {
 		if err := s.validateKeyForExistingProtectedFiles(config, key); err != nil {
 			return err
 		}
-		if anyPortableRequiresKMS(config, config.ProtectedFiles) {
+		if anyPortableRequiresKMS(config, protectedPaths(config.ProtectedFiles)) {
 			if err := ensureKMSReady(config); err != nil {
 				return err
 			}
@@ -85,7 +86,8 @@ func (s *Service) RunList() error {
 	}
 
 	trackedRels := make(map[string]struct{}, len(config.ProtectedFiles))
-	for _, portable := range config.ProtectedFiles {
+	for _, entry := range config.ProtectedFiles {
+		portable := entry.Path
 		tracked, err := buildTrackedFileFromPortable(paths.Home, paths.SecureDir, paths.InsecureDir, portable)
 		if err != nil {
 			return fmt.Errorf("resolve tracked path %s: %w", portable, err)
@@ -104,7 +106,8 @@ func (s *Service) RunList() error {
 
 	fmt.Fprintln(out, "Legend: OK=match MISSING_INSECURE=RAM copy missing MISSING_SECURE=encrypted copy missing MISMATCH=hash mismatch")
 
-	for _, portable := range config.ProtectedFiles {
+	for _, entry := range config.ProtectedFiles {
+		portable := entry.Path
 		tracked, err := buildTrackedFileFromPortable(paths.Home, paths.SecureDir, paths.InsecureDir, portable)
 		if err != nil {
 			return fmt.Errorf("resolve tracked path %s: %w", portable, err)
