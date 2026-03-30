@@ -139,6 +139,12 @@ assert_list_not_paused() {
 	fi
 }
 
+assert_output_contains() {
+	local output="$1"
+	local expected="$2"
+	printf '%s\n' "$output" | grep -F "$expected" >/dev/null || fail "expected output to contain: $expected"
+}
+
 assert_no_list_status() {
 	local list_output="$1"
 	local status="$2"

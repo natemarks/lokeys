@@ -60,7 +60,10 @@ assert_symlink_target "$TEST_HOME/notes/c.txt" "$TEST_INSECURE_DIR/notes/c.txt"
 log_step "Validating pause/unpause behavior"
 # Pause one managed file, verify unseal skips it, ensure list reports PAUSED,
 # verify seal succeeds while paused file is missing from insecure, then unpause.
-lk pause "$TEST_HOME/notes/c.txt"
+pause_output_first="$(lk_capture pause "$TEST_HOME/notes/c.txt")"
+assert_output_contains "$pause_output_first" "paused \$HOME/notes/c.txt"
+pause_output_second="$(lk_capture pause "$TEST_HOME/notes/c.txt")"
+assert_output_contains "$pause_output_second" "\$HOME/notes/c.txt already paused."
 clear_directory_contents "$TEST_INSECURE_DIR"
 lk unseal
 assert_file "$TEST_INSECURE_DIR/docs/a.txt"
@@ -75,7 +78,10 @@ assert_list_not_paused "$list_after_pause" "\$HOME/docs/a.txt"
 
 lk seal
 
-lk unpause "$TEST_HOME/notes/c.txt"
+unpause_output_first="$(lk_capture unpause "$TEST_HOME/notes/c.txt")"
+assert_output_contains "$unpause_output_first" "unpaused \$HOME/notes/c.txt"
+unpause_output_second="$(lk_capture unpause "$TEST_HOME/notes/c.txt")"
+assert_output_contains "$unpause_output_second" "\$HOME/notes/c.txt already unpaused."
 clear_directory_contents "$TEST_INSECURE_DIR"
 lk unseal
 assert_file "$TEST_INSECURE_DIR/notes/c.txt"

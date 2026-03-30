@@ -95,7 +95,10 @@ assert_symlink_target "$TEST_HOME/.aws/credentials" "$TEST_INSECURE_DIR/.aws/cre
 log_step "Validating pause/unpause behavior for KMS-managed file"
 # Pause KMS-managed docs file, verify unseal skips only that file, and confirm
 # seal tolerates missing managed insecure content while paused.
-lk pause "$TEST_HOME/docs/a.txt"
+pause_output_first="$(lk_capture pause "$TEST_HOME/docs/a.txt")"
+assert_output_contains "$pause_output_first" "paused \$HOME/docs/a.txt"
+pause_output_second="$(lk_capture pause "$TEST_HOME/docs/a.txt")"
+assert_output_contains "$pause_output_second" "\$HOME/docs/a.txt already paused."
 clear_directory_contents "$TEST_INSECURE_DIR"
 lk unseal
 assert_file "$TEST_INSECURE_DIR/.aws/config"
@@ -109,7 +112,10 @@ assert_list_paused "$list_after_pause" "\$HOME/docs/a.txt"
 
 lk seal
 
-lk unpause "$TEST_HOME/docs/a.txt"
+unpause_output_first="$(lk_capture unpause "$TEST_HOME/docs/a.txt")"
+assert_output_contains "$unpause_output_first" "unpaused \$HOME/docs/a.txt"
+unpause_output_second="$(lk_capture unpause "$TEST_HOME/docs/a.txt")"
+assert_output_contains "$unpause_output_second" "\$HOME/docs/a.txt already unpaused."
 clear_directory_contents "$TEST_INSECURE_DIR"
 lk unseal
 assert_file "$TEST_INSECURE_DIR/docs/a.txt"
