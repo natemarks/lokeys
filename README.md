@@ -50,6 +50,8 @@ lokeys help
 
 - `lokeys add <path>`: protect a file and replace original with symlink to RAM copy
 - `lokeys remove <path>`: unprotect a file
+- `lokeys pause <path>`: mark managed file as paused (unseal skips it)
+- `lokeys unpause <path>`: resume normal unseal behavior for a managed file
 - `lokeys list`: show tracked files and integrity status
 - `lokeys seal`: encrypt current RAM-disk copies to secure storage
 - `lokeys unseal`: decrypt tracked files back into RAM disk
@@ -147,6 +149,12 @@ Status meanings:
 - `MISMATCH`: hashes differ (RAM and secure content diverged)
 - `UNTRACKED_INSECURE`: file exists in RAM disk but is not yet in config
 
+Paused marker:
+
+- `PAUSED`: appears on managed entries marked paused in config
+- Paused files are intentionally skipped by `unseal`
+- `seal` does not fail if a managed paused file is missing from RAM disk
+
 ---
 
 ### Story 3: Edit a protected file and save changes
@@ -184,6 +192,43 @@ lokeys list
 - `unseal` decrypts secure files into RAM disk and restores symlinks
 - your editor writes to RAM-backed plaintext
 - `seal` re-encrypts RAM contents into `~/.lokeys/secure`
+
+---
+
+### Story 3b: Temporarily pause/unpause one managed file
+
+**Goal**
+- Skip `unseal` extraction for one managed file during a maintenance window.
+
+**Steps**
+
+1. Pause one managed file:
+
+```bash
+lokeys pause ~/.ssh/id_rsa
+```
+
+2. Simulate RAM loss and unseal:
+
+```bash
+sudo umount "$HOME/.lokeys/insecure"
+lokeys unseal
+lokeys list
+```
+
+3. Resume normal behavior:
+
+```bash
+lokeys unpause ~/.ssh/id_rsa
+sudo umount "$HOME/.lokeys/insecure"
+lokeys unseal
+lokeys list
+```
+
+**Expected**
+- While paused, `~/.ssh/id_rsa` is shown with `PAUSED` and typically `MISSING_INSECURE` after reboot.
+- `seal` remains successful even when that managed paused file is absent from RAM disk.
+- After unpause + unseal, file returns to normal managed `OK` behavior.
 
 ---
 
@@ -529,6 +574,7 @@ Runs end-to-end local-key scenarios:
 - generate test files
 - protect/edit/seal/verify consistency
 - simulate reboot by clearing insecure path then unseal and verify symlinks
+- pause/unpause one managed file and verify unseal skip + resume behavior
 - rotate local key and re-verify seal/unseal
 - backup, wipe state, restore, and verify again
 
@@ -542,6 +588,8 @@ make integration-workflows-local
 
 Runs the same lifecycle with AWS KMS enabled, including automatic bypass
 validation for `~/.aws/config` and `~/.aws/credentials`.
+
+Also validates pause/unpause behavior for a KMS-managed file (`docs/a.txt`).
 
 Required environment:
 
