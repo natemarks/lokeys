@@ -157,3 +157,44 @@ func TestRunPauseAndUnpause_AreIdempotent(t *testing.T) {
 		t.Fatalf("expected already-unpaused message, got %q", outStr)
 	}
 }
+
+func TestRunPauseAndUnpause_OutputSnapshot(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	if _, _, err := ensureConfig(); err != nil {
+		t.Fatalf("ensure config: %v", err)
+	}
+	portable := "$HOME/docs/snapshot.txt"
+	if err := writeConfig(newConfigFixtureBuilder().WithManagedFilePaused(portable, false).Build()); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	var out bytes.Buffer
+	svc := NewService(Deps{Stdout: &out, Stderr: io.Discard, Mounter: testMounter{}, Keys: testKeySource{}})
+	pathArg := filepath.Join(home, "docs", "snapshot.txt")
+
+	if err := svc.RunPause(pathArg); err != nil {
+		t.Fatalf("first RunPause: %v", err)
+	}
+	if err := svc.RunPause(pathArg); err != nil {
+		t.Fatalf("second RunPause: %v", err)
+	}
+	if err := svc.RunUnpause(pathArg); err != nil {
+		t.Fatalf("first RunUnpause: %v", err)
+	}
+	if err := svc.RunUnpause(pathArg); err != nil {
+		t.Fatalf("second RunUnpause: %v", err)
+	}
+
+	want := strings.Join([]string{
+		"paused " + portable,
+		portable + " already paused.",
+		"unpaused " + portable,
+		portable + " already unpaused.",
+		"",
+	}, "\n")
+	if got := out.String(); got != want {
+		t.Fatalf("pause/unpause snapshot mismatch\nwant:\n%q\ngot:\n%q", want, got)
+	}
+}

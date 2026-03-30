@@ -98,6 +98,64 @@ func TestRunList_ShowsPausedMarkerForPausedManagedFile(t *testing.T) {
 	}
 }
 
+func TestRunList_PausedLineOutputSnapshot(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	key, encoded := mustEncodedSessionKey(t)
+	t.Setenv(SessionKeyEnv, encoded)
+
+	if _, _, err := ensureConfig(); err != nil {
+		t.Fatalf("ensure config: %v", err)
+	}
+
+	portable := "$HOME/docs/paused-snapshot.txt"
+	insecurePath := filepath.Join(home, defaultDecryptedRel, "docs", "paused-snapshot.txt")
+	securePath := filepath.Join(home, defaultEncryptedRel, "docs", "paused-snapshot.txt")
+
+	plaintext := []byte("paused-snapshot-data\n")
+	if err := os.MkdirAll(filepath.Dir(insecurePath), dirPerm); err != nil {
+		t.Fatalf("mkdir insecure parent: %v", err)
+	}
+	if err := os.WriteFile(insecurePath, plaintext, 0600); err != nil {
+		t.Fatalf("write insecure file: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(securePath), dirPerm); err != nil {
+		t.Fatalf("mkdir secure parent: %v", err)
+	}
+	ciphertext, err := encryptBytes(plaintext, key)
+	if err != nil {
+		t.Fatalf("encrypt secure file: %v", err)
+	}
+	if err := os.WriteFile(securePath, ciphertext, 0600); err != nil {
+		t.Fatalf("write secure file: %v", err)
+	}
+
+	if err := writeConfig(newConfigFixtureBuilder().WithManagedFilePaused(portable, true).Build()); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	stdout := &bytes.Buffer{}
+	svc := NewService(Deps{Stdout: stdout, Stderr: &bytes.Buffer{}, Mounter: testMounter{}, Keys: testKeySource{}})
+	if err := svc.RunList(); err != nil {
+		t.Fatalf("RunList: %v", err)
+	}
+
+	hash, err := sha256File(insecurePath)
+	if err != nil {
+		t.Fatalf("hash insecure file: %v", err)
+	}
+	want := fmt.Sprintf(
+		"Legend: OK=match MISSING_INSECURE=RAM copy missing MISSING_SECURE=encrypted copy missing MISMATCH=hash mismatch\n%s  insecure=%s  secure=%s  OK  PAUSED\n",
+		portable,
+		hash,
+		hash,
+	)
+	if got := stdout.String(); got != want {
+		t.Fatalf("list paused snapshot mismatch\nwant:\n%q\ngot:\n%q", want, got)
+	}
+}
+
 func TestRunList_StatusMatrix(t *testing.T) {
 	type testCase struct {
 		name          string

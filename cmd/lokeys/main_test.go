@@ -52,6 +52,50 @@ func TestRunPauseAndUnpause_EnforceSingleArgUsage(t *testing.T) {
 	}
 }
 
+func TestUsageErrorMessages_Snapshots(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want string
+	}{
+		{
+			name: "pause missing path",
+			err:  runPause([]string{}),
+			want: "usage error: pause requires a single path",
+		},
+		{
+			name: "pause too many args",
+			err:  runPause([]string{"a", "b"}),
+			want: "usage error: pause requires a single path",
+		},
+		{
+			name: "unpause missing path",
+			err:  runUnpause([]string{}),
+			want: "usage error: unpause requires a single path",
+		},
+		{
+			name: "list extra arg",
+			err:  requireNoArgs([]string{"extra"}, "list"),
+			want: "usage error: list takes no arguments",
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.err == nil {
+				t.Fatalf("expected usage error")
+			}
+			if !errors.Is(tc.err, errUsage) {
+				t.Fatalf("expected errUsage, got %v", tc.err)
+			}
+			if got := tc.err.Error(); got != tc.want {
+				t.Fatalf("usage error snapshot mismatch\nwant: %q\ngot:  %q", tc.want, got)
+			}
+		})
+	}
+}
+
 // TestRequireZeroOrOneArg_ReturnsUsageErrorOnMany verifies optional single-arg
 // commands reject argument lists longer than one.
 func TestRequireZeroOrOneArg_ReturnsUsageErrorOnMany(t *testing.T) {
