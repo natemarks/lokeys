@@ -16,7 +16,7 @@ func TestRunPause_SetsPausedTrue(t *testing.T) {
 		t.Fatalf("ensure config: %v", err)
 	}
 	portable := "$HOME/docs/a.txt"
-	if err := writeConfig(&config{ProtectedFiles: protectedFilesFromPaths([]string{portable})}); err != nil {
+	if err := writeConfig(newConfigFixtureBuilder().WithManagedFile(portable).Build()); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 
@@ -50,7 +50,7 @@ func TestRunUnpause_SetsPausedFalse(t *testing.T) {
 		t.Fatalf("ensure config: %v", err)
 	}
 	portable := "$HOME/docs/b.txt"
-	if err := writeConfig(&config{ProtectedFiles: []protectedFile{{Path: portable, Paused: true}}}); err != nil {
+	if err := writeConfig(newConfigFixtureBuilder().WithManagedFilePaused(portable, true).Build()); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 
@@ -109,7 +109,7 @@ func TestRunPauseAndUnpause_AreIdempotent(t *testing.T) {
 		t.Fatalf("ensure config: %v", err)
 	}
 	portable := "$HOME/docs/idempotent.txt"
-	if err := writeConfig(&config{ProtectedFiles: []protectedFile{{Path: portable, Paused: false}}}); err != nil {
+	if err := writeConfig(newConfigFixtureBuilder().WithManagedFilePaused(portable, false).Build()); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 

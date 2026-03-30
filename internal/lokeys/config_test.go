@@ -23,7 +23,7 @@ func TestWriteConfigTo_ReplacesConfigContents(t *testing.T) {
 		t.Fatalf("seed config: %v", err)
 	}
 
-	want := &config{ProtectedFiles: protectedFilesFromPaths([]string{"$HOME/new.txt", "$HOME/next.txt"})}
+	want := newConfigFixtureBuilder().WithManagedFiles("$HOME/new.txt", "$HOME/next.txt").Build()
 	if err := writeConfigTo(path, want); err != nil {
 		t.Fatalf("writeConfigTo: %v", err)
 	}
@@ -76,10 +76,10 @@ func TestWriteAndReadConfig_PreservesPausedFlagsInNewFormat(t *testing.T) {
 	root := t.TempDir()
 	path := filepath.Join(root, "lokeys.json")
 
-	want := &config{ProtectedFiles: []protectedFile{
-		{Path: "$HOME/paused.txt", Paused: true},
-		{Path: "$HOME/active.txt", Paused: false},
-	}}
+	want := newConfigFixtureBuilder().
+		WithManagedFilePaused("$HOME/paused.txt", true).
+		WithManagedFilePaused("$HOME/active.txt", false).
+		Build()
 	if err := writeConfigTo(path, want); err != nil {
 		t.Fatalf("writeConfigTo: %v", err)
 	}

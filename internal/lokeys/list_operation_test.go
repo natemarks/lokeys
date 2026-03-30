@@ -79,7 +79,7 @@ func TestRunList_ShowsPausedMarkerForPausedManagedFile(t *testing.T) {
 		t.Fatalf("write secure file: %v", err)
 	}
 
-	if err := writeConfig(&config{ProtectedFiles: []protectedFile{{Path: portable, Paused: true}}}); err != nil {
+	if err := writeConfig(newConfigFixtureBuilder().WithManagedFilePaused(portable, true).Build()); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 

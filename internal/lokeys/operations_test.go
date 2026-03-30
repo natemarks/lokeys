@@ -301,7 +301,7 @@ func TestRunAdd_AWSCredentialsAutoBypassWithoutFlag(t *testing.T) {
 	if _, _, err := ensureConfig(); err != nil {
 		t.Fatalf("ensure config: %v", err)
 	}
-	if err := writeConfig(&config{ProtectedFiles: []protectedFile{}, KMS: &kmsConfig{Enabled: true, KeyID: "alias/lokeys", Region: "us-east-1"}}); err != nil {
+	if err := writeConfig(newConfigFixtureBuilder().WithKMSEnabled("alias/lokeys", "us-east-1").Build()); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 
@@ -348,7 +348,7 @@ func TestRunAdd_AWSNonDefaultPathStillRequiresExplicitBypass(t *testing.T) {
 	if _, _, err := ensureConfig(); err != nil {
 		t.Fatalf("ensure config: %v", err)
 	}
-	if err := writeConfig(&config{ProtectedFiles: []protectedFile{}, KMS: &kmsConfig{Enabled: true, KeyID: "alias/lokeys", Region: "us-east-1"}}); err != nil {
+	if err := writeConfig(newConfigFixtureBuilder().WithKMSEnabled("alias/lokeys", "us-east-1").Build()); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 
@@ -394,7 +394,7 @@ func TestRunSeal_AWSDefaultsDiscoveryAutoBypass(t *testing.T) {
 	if _, _, err := ensureConfig(); err != nil {
 		t.Fatalf("ensure config: %v", err)
 	}
-	if err := writeConfig(&config{ProtectedFiles: []protectedFile{}, KMS: &kmsConfig{Enabled: true, KeyID: "alias/lokeys", Region: "us-east-1"}}); err != nil {
+	if err := writeConfig(newConfigFixtureBuilder().WithKMSEnabled("alias/lokeys", "us-east-1").Build()); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 
@@ -439,7 +439,7 @@ func TestRunSeal_AWSNonDefaultDiscoveryStillNeedsExplicitBypass(t *testing.T) {
 	if _, _, err := ensureConfig(); err != nil {
 		t.Fatalf("ensure config: %v", err)
 	}
-	if err := writeConfig(&config{ProtectedFiles: []protectedFile{}, KMS: &kmsConfig{Enabled: true, KeyID: "alias/lokeys", Region: "us-east-1"}}); err != nil {
+	if err := writeConfig(newConfigFixtureBuilder().WithKMSEnabled("alias/lokeys", "us-east-1").Build()); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 
@@ -498,7 +498,7 @@ func TestRunUnseal_AWSDefaultsDoNotRequireKMSHealthCheck(t *testing.T) {
 		t.Fatalf("ensure config: %v", err)
 	}
 
-	if err := writeConfig(&config{ProtectedFiles: protectedFilesFromPaths([]string{awsConfigPortable}), KMS: &kmsConfig{Enabled: true, KeyID: "alias/lokeys", Region: ""}}); err != nil {
+	if err := writeConfig(newConfigFixtureBuilder().WithManagedFile(awsConfigPortable).WithKMSEnabled("alias/lokeys", "").Build()); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 
@@ -544,10 +544,7 @@ func TestRunUnseal_AWSDefaultsDecryptBeforeKMSFailure(t *testing.T) {
 	}
 
 	kmsPortable := filepath.Join("$HOME", "work", "kms-only.txt")
-	if err := writeConfig(&config{
-		ProtectedFiles: protectedFilesFromPaths([]string{awsConfigPortable, kmsPortable}),
-		KMS:            &kmsConfig{Enabled: true, KeyID: "alias/lokeys", Region: "invalid-region-1"},
-	}); err != nil {
+	if err := writeConfig(newConfigFixtureBuilder().WithManagedFiles(awsConfigPortable, kmsPortable).WithKMSEnabled("alias/lokeys", "invalid-region-1").Build()); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 
@@ -617,10 +614,7 @@ func TestRunUnseal_SkipsPausedFiles(t *testing.T) {
 		t.Fatalf("ensure config: %v", err)
 	}
 
-	if err := writeConfig(&config{ProtectedFiles: []protectedFile{
-		{Path: pausedPortable, Paused: true},
-		{Path: unpausedPortable, Paused: false},
-	}}); err != nil {
+	if err := writeConfig(newConfigFixtureBuilder().WithManagedFilePaused(pausedPortable, true).WithManagedFilePaused(unpausedPortable, false).Build()); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 
