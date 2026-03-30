@@ -28,7 +28,7 @@ ifneq ($(strip $(INTEGRATION_SH_FILES)),)
 SH_FILES := $(INTEGRATION_SH_FILES)
 endif
 
-.PHONY: static go-static bash-static gofmt-check go-vet golint go-deadcode go-test shfmt-check shellcheck build git-clean integration-workflows integration-workflows-local integration-workflows-kms release release-dry-run release-check release-clean release-build-linux release-checksums release-create release-upload release-tag-check release-tag release-tag-push release-all
+.PHONY: static go-static bash-static gofmt-check go-vet golint go-deadcode go-test shfmt-check shellcheck build git-clean integration-preflight-local integration-preflight-kms test-integration-local test-integration-kms test-integration integration-workflows integration-workflows-local integration-workflows-kms release release-dry-run release-check release-clean release-build-linux release-checksums release-create release-upload release-tag-check release-tag release-tag-push release-all
 
 static: go-static bash-static ## Run all static checks.
 
@@ -100,6 +100,34 @@ integration-workflows-kms: ## Run KMS integration workflow test (requires AWS_PR
 	LOKEYS_BIN=./bin/lokeys bash scripts/integration/kms_workflow.sh
 
 integration-workflows: integration-workflows-local integration-workflows-kms ## Run all integration workflow tests.
+
+integration-preflight-local: ## Validate local integration workflow prerequisites.
+	@command -v bash >/dev/null 2>&1 || { printf "bash is required\n"; exit 1; }
+	@command -v go >/dev/null 2>&1 || { printf "go is required\n"; exit 1; }
+	@command -v readlink >/dev/null 2>&1 || { printf "readlink is required\n"; exit 1; }
+	@command -v rm >/dev/null 2>&1 || { printf "rm is required\n"; exit 1; }
+	@command -v openssl >/dev/null 2>&1 || { printf "openssl is required\n"; exit 1; }
+	@command -v mountpoint >/dev/null 2>&1 || { printf "mountpoint is required\n"; exit 1; }
+	@command -v umount >/dev/null 2>&1 || { printf "umount is required\n"; exit 1; }
+	@command -v sudo >/dev/null 2>&1 || { printf "sudo is required for integration mount cleanup\n"; exit 1; }
+	@[ -t 0 ] || { printf "integration workflows require an interactive terminal (TTY)\n"; exit 1; }
+	@sudo -n true >/dev/null 2>&1 || { printf "sudo non-interactive access is required; run 'sudo -v' first\n"; exit 1; }
+
+integration-preflight-kms: integration-preflight-local ## Validate KMS integration prerequisites.
+	@command -v aws >/dev/null 2>&1 || { printf "aws CLI is required for KMS integration workflow\n"; exit 1; }
+	@[ -n "$(AWS_PROFILE)" ] || { printf "AWS_PROFILE is required for KMS integration workflow\n"; exit 1; }
+	@aws sts get-caller-identity --profile "$(AWS_PROFILE)" >/dev/null || { printf "unable to call sts:GetCallerIdentity with AWS_PROFILE=%s\n" "$(AWS_PROFILE)"; exit 1; }
+	@region_value="$${AWS_REGION:-$${AWS_DEFAULT_REGION:-$$(aws configure get region --profile "$(AWS_PROFILE)" 2>/dev/null)}}"; \
+	if [ -z "$$region_value" ]; then \
+		printf "set AWS_REGION/AWS_DEFAULT_REGION or configure a profile region for AWS_PROFILE=%s\n" "$(AWS_PROFILE)"; \
+		exit 1; \
+	fi
+
+test-integration-local: integration-preflight-local integration-workflows-local ## Run local integration workflow with preflight checks.
+
+test-integration-kms: integration-preflight-kms integration-workflows-kms ## Run KMS integration workflow with preflight checks.
+
+test-integration: integration-preflight-kms integration-workflows ## Run all integration workflows with preflight checks.
 
 release-check: ## Validate release prerequisites (tag/tools/auth/clean tree).
 	@if [ -z "$(RELEASE_TAG)" ]; then \
