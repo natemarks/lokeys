@@ -128,6 +128,13 @@ func (s *Service) sealTrackedAndDiscovered(cfg *config, paths appPaths, key []by
 }
 
 func planSeal(paths appPaths, cfg *config, tracked []trackedFile, discovered []trackedFile, key []byte, allowBypass map[string]struct{}) (plan, *config) {
+	// Invariants for tracked files:
+	// - Missing insecure sources are non-fatal and skipped.
+	// - No config mutation occurs for tracked-only sealing.
+	// Invariants for discovered files:
+	// - Enrollment is explicit in this planner and always paired with a config
+	//   write action.
+	// - KMS bypass decisions are persisted via updated.KMSBypassFiles.
 	actions := []action{{Kind: actionEnsureEncryptedDir, Path: paths.SecureDir}}
 	kmsCfg, _ := cfg.kmsRuntimeConfig()
 	for _, tf := range tracked {

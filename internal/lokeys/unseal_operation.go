@@ -29,6 +29,9 @@ func (s *Service) RunUnseal() error {
 
 	tracked := make([]trackedFile, 0, len(cfg.ProtectedFiles))
 	for _, entry := range cfg.ProtectedFiles {
+		// Invariant: paused entries are intentionally excluded from unseal action
+		// planning. This means no decrypt and no symlink replacement for paused
+		// files until explicitly unpaused.
 		if entry.Paused {
 			continue
 		}
@@ -91,6 +94,9 @@ func hasAWSAutoBypassTracked(tracked []trackedFile) bool {
 }
 
 func planUnseal(cfg *config, tracked []trackedFile, key []byte) plan {
+	// Invariant: all tracked inputs are already filtered for eligibility by the
+	// caller (for example paused entries are removed before this planner runs).
+	// This planner always emits decrypt+symlink actions for each provided file.
 	kmsCfg, _ := cfg.kmsRuntimeConfig()
 	actions := make([]action, 0, len(tracked)*3)
 	for _, tf := range tracked {

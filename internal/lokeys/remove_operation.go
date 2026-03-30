@@ -53,6 +53,9 @@ func (s *Service) RunRemove(pathArg string) error {
 }
 
 func planRemove(cfg *config, idx int, tracked trackedFile) plan {
+	// Invariant: remove always persists config, even when managed artifacts are
+	// already missing on disk. Path removals are best-effort via IgnoreNotExist,
+	// keeping command behavior idempotent for repeated cleanup attempts.
 	updated := &config{ProtectedFiles: cfg.protectedFileEntries()}
 	_ = idx // idx is resolved by caller for user-facing not-protected behavior.
 	updated.removeProtectedFile(tracked.Portable)
