@@ -2,6 +2,7 @@ package lokeys
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -95,4 +96,126 @@ func TestRunList_ShowsPausedMarkerForPausedManagedFile(t *testing.T) {
 	if !strings.Contains(out, "OK  PAUSED") {
 		t.Fatalf("expected paused marker in output, got: %q", out)
 	}
+}
+
+func TestRunList_StatusMatrix(t *testing.T) {
+	type testCase struct {
+		name          string
+		insecureExist bool
+		secureExist   bool
+		hashesMatch   bool
+		paused        bool
+		wantStatus    string
+	}
+
+	computeExpectedStatus := func(insecureExist bool, secureExist bool, hashesMatch bool) string {
+		switch {
+		case !insecureExist:
+			return "MISSING_INSECURE"
+		case !secureExist:
+			return "MISSING_SECURE"
+		case !hashesMatch:
+			return "MISMATCH"
+		default:
+			return "OK"
+		}
+	}
+
+	cases := []testCase{}
+	for _, insecureExist := range []bool{false, true} {
+		for _, secureExist := range []bool{false, true} {
+			for _, hashesMatch := range []bool{false, true} {
+				for _, paused := range []bool{false, true} {
+					cases = append(cases, testCase{
+						name:          fmt.Sprintf("insecure_%t_secure_%t_match_%t_paused_%t", insecureExist, secureExist, hashesMatch, paused),
+						insecureExist: insecureExist,
+						secureExist:   secureExist,
+						hashesMatch:   hashesMatch,
+						paused:        paused,
+						wantStatus:    computeExpectedStatus(insecureExist, secureExist, hashesMatch),
+					})
+				}
+			}
+		}
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			home := t.TempDir()
+			t.Setenv("HOME", home)
+
+			key, encoded := mustEncodedSessionKey(t)
+			t.Setenv(SessionKeyEnv, encoded)
+
+			if _, _, err := ensureConfig(); err != nil {
+				t.Fatalf("ensure config: %v", err)
+			}
+
+			portable := "$HOME/docs/matrix.txt"
+			if err := writeConfig(newConfigFixtureBuilder().WithManagedFilePaused(portable, tc.paused).Build()); err != nil {
+				t.Fatalf("write config: %v", err)
+			}
+
+			insecurePath := filepath.Join(home, defaultDecryptedRel, "docs", "matrix.txt")
+			securePath := filepath.Join(home, defaultEncryptedRel, "docs", "matrix.txt")
+
+			insecurePlain := []byte("matrix-insecure\n")
+			securePlain := []byte("matrix-insecure\n")
+			if !tc.hashesMatch {
+				securePlain = []byte("matrix-secure-different\n")
+			}
+
+			if tc.insecureExist {
+				if err := os.MkdirAll(filepath.Dir(insecurePath), dirPerm); err != nil {
+					t.Fatalf("mkdir insecure parent: %v", err)
+				}
+				if err := os.WriteFile(insecurePath, insecurePlain, 0600); err != nil {
+					t.Fatalf("write insecure file: %v", err)
+				}
+			}
+
+			if tc.secureExist {
+				if err := os.MkdirAll(filepath.Dir(securePath), dirPerm); err != nil {
+					t.Fatalf("mkdir secure parent: %v", err)
+				}
+				ciphertext, err := encryptBytes(securePlain, key)
+				if err != nil {
+					t.Fatalf("encrypt secure file: %v", err)
+				}
+				if err := os.WriteFile(securePath, ciphertext, 0600); err != nil {
+					t.Fatalf("write secure file: %v", err)
+				}
+			}
+
+			stdout := &bytes.Buffer{}
+			svc := NewService(Deps{Stdout: stdout, Stderr: &bytes.Buffer{}, Mounter: testMounter{}, Keys: testKeySource{}})
+			if err := svc.RunList(); err != nil {
+				t.Fatalf("RunList: %v", err)
+			}
+
+			line, found := findListLine(stdout.String(), portable)
+			if !found {
+				t.Fatalf("expected output line for %s, got: %q", portable, stdout.String())
+			}
+
+			if !strings.Contains(line, "  "+tc.wantStatus) {
+				t.Fatalf("expected status %q in line %q", tc.wantStatus, line)
+			}
+
+			hasPaused := strings.Contains(line, "  PAUSED")
+			if hasPaused != tc.paused {
+				t.Fatalf("paused marker mismatch: want=%t line=%q", tc.paused, line)
+			}
+		})
+	}
+}
+
+func findListLine(output string, portable string) (string, bool) {
+	for _, line := range strings.Split(output, "\n") {
+		if strings.HasPrefix(line, portable+"  insecure=") {
+			return line, true
+		}
+	}
+	return "", false
 }
