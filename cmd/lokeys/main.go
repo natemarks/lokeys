@@ -47,6 +47,8 @@ func registerCommands() {
 		&listCommand{},
 		&addCommand{},
 		&removeCommand{},
+		&pauseCommand{},
+		&unpauseCommand{},
 		&sealCommand{},
 		&unsealCommand{},
 		&backupCommand{},

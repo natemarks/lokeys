@@ -77,7 +77,7 @@ func (s *Service) RunEnableKMS(opts EnableKMSOptions) (string, error) {
 		if err := validateKMSGenerateDataKey(client, alias, resolvedProfile, resolvedRegion); err != nil {
 			return "", err
 		}
-		updated := &config{ProtectedFiles: append([]string{}, cfg.ProtectedFiles...), KMSBypassFiles: append([]string{}, cfg.KMSBypassFiles...)}
+		updated := &config{ProtectedFiles: cfg.protectedFileEntries(), KMSBypassFiles: append([]string{}, cfg.KMSBypassFiles...)}
 		updated.KMS = &kmsConfig{
 			Enabled:           true,
 			KeyID:             alias,

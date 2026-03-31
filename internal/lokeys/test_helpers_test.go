@@ -97,3 +97,83 @@ func newTestServiceWithOpts(opts testServiceOpts) *Service {
 
 	return NewService(deps)
 }
+
+func protectedFilesFromPaths(paths []string) []protectedFile {
+	entries := make([]protectedFile, 0, len(paths))
+	for _, path := range paths {
+		entries = append(entries, protectedFile{Path: path})
+	}
+	return entries
+}
+
+// configFixtureBuilder creates test configs with concise, readable setup.
+//
+// It is intentionally test-only and optimized for common cases:
+// managed files (paused/unpaused), KMS enabled/disabled, and bypass entries.
+type configFixtureBuilder struct {
+	cfg config
+}
+
+func newConfigFixtureBuilder() *configFixtureBuilder {
+	return &configFixtureBuilder{
+		cfg: config{ProtectedFiles: []protectedFile{}},
+	}
+}
+
+func (b *configFixtureBuilder) WithManagedFiles(paths ...string) *configFixtureBuilder {
+	for _, path := range paths {
+		b.cfg.ProtectedFiles = append(b.cfg.ProtectedFiles, protectedFile{Path: path, Paused: false})
+	}
+	return b
+}
+
+func (b *configFixtureBuilder) WithManagedFile(path string) *configFixtureBuilder {
+	return b.WithManagedFilePaused(path, false)
+}
+
+func (b *configFixtureBuilder) WithManagedFilePaused(path string, paused bool) *configFixtureBuilder {
+	b.cfg.ProtectedFiles = append(b.cfg.ProtectedFiles, protectedFile{Path: path, Paused: paused})
+	return b
+}
+
+func (b *configFixtureBuilder) WithKMSEnabled(keyID string, region string) *configFixtureBuilder {
+	b.cfg.KMS = &kmsConfig{Enabled: true, KeyID: keyID, Region: region}
+	return b
+}
+
+func (b *configFixtureBuilder) WithKMSDisabled() *configFixtureBuilder {
+	b.cfg.KMS = &kmsConfig{Enabled: false}
+	return b
+}
+
+func (b *configFixtureBuilder) WithKMSBypassFiles(paths ...string) *configFixtureBuilder {
+	b.cfg.KMSBypassFiles = append(b.cfg.KMSBypassFiles, paths...)
+	return b
+}
+
+func (b *configFixtureBuilder) Build() *config {
+	result := &config{
+		ProtectedFiles: cloneProtectedFiles(b.cfg.ProtectedFiles),
+		KMSBypassFiles: append([]string{}, b.cfg.KMSBypassFiles...),
+	}
+	if b.cfg.KMS != nil {
+		kmsCopy := *b.cfg.KMS
+		if kmsCopy.EncryptionContext != nil {
+			kmsCopy.EncryptionContext = make(map[string]string, len(kmsCopy.EncryptionContext))
+			for key, value := range kmsCopy.EncryptionContext {
+				kmsCopy.EncryptionContext[key] = value
+			}
+		}
+		result.KMS = &kmsCopy
+	}
+	return result
+}
+
+func containsString(values []string, value string) bool {
+	for _, item := range values {
+		if item == value {
+			return true
+		}
+	}
+	return false
+}

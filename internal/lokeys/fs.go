@@ -83,15 +83,6 @@ func hashOrMissing(value string) string {
 	return value
 }
 
-func containsString(values []string, value string) bool {
-	for _, item := range values {
-		if item == value {
-			return true
-		}
-	}
-	return false
-}
-
 func createBackupTarGzWithNow(secureDir string, configPath string, now func() time.Time) (string, error) {
 	if err := ensureEncryptedDir(secureDir); err != nil {
 		return "", err

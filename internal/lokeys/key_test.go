@@ -68,7 +68,7 @@ func TestValidateKeyForExistingProtectedFiles_WrongKey_Errors(t *testing.T) {
 		t.Fatalf("write secure file: %v", err)
 	}
 
-	cfg := &config{ProtectedFiles: []string{"$HOME/notes/a.txt"}}
+	cfg := &config{ProtectedFiles: protectedFilesFromPaths([]string{"$HOME/notes/a.txt"})}
 	err = validateKeyForExistingProtectedFiles(cfg, wrongKey)
 	if err == nil {
 		t.Fatalf("expected validation error")

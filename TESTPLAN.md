@@ -38,7 +38,7 @@ Steps:
 
 Expected:
 
-- Help text lists: `list`, `add`, `remove`, `seal`, `unseal`, `backup`, `rotate`, `session-export`, `version`
+- Help text lists: `list`, `add`, `remove`, `pause`, `unpause`, `seal`, `unseal`, `backup`, `rotate`, `session-export`, `version`
 - Help text includes session key guidance
 - `version` prints a version string and exits `0`
 
@@ -129,6 +129,44 @@ Expected:
 - After unmount, `unseal` remounts RAM disk and restores decrypted copies
 - File content equals `api-token-456`
 - Final `list` status is `OK`
+
+### 4b) Pause/unpause workflow
+
+Goal: Verify paused files are skipped by `unseal`, still listed, and resume correctly.
+
+Steps:
+
+1. Ensure at least two files are already protected (e.g., from Workflow 3).
+2. Pause one managed file:
+
+   ```bash
+   $LOKEYS pause "$TEST_ROOT/secrets/demo.txt"
+   ```
+
+3. Simulate RAM loss and unseal:
+
+   ```bash
+   sudo umount "$HOME/.lokeys/insecure"
+   $LOKEYS unseal
+   $LOKEYS list
+   ```
+
+4. Run `seal` while the paused file is missing from RAM copy.
+5. Unpause and recover normally:
+
+   ```bash
+   $LOKEYS unpause "$TEST_ROOT/secrets/demo.txt"
+   sudo umount "$HOME/.lokeys/insecure"
+   $LOKEYS unseal
+   $LOKEYS list
+   ```
+
+Expected:
+
+- While paused, the file line includes `PAUSED` and commonly `MISSING_INSECURE` after remount.
+- Other unpaused files are still restored by `unseal`.
+- `seal` succeeds even if paused managed file is absent from `~/.lokeys/insecure`.
+- After `unpause`, `unseal` restores the file again and it returns to normal status.
 
 ### 5) Backup workflow (`backup`)
 
@@ -436,6 +474,25 @@ Expected:
 - Prints `<path> is not protected.`
 - Exits `0`
 
+### 7b) `pause`/`unpause` when target is not protected
+
+Goal: Verify idempotent and friendly behavior for unmanaged targets.
+
+Steps:
+
+```bash
+printf 'noop\n' > "$TEST_ROOT/not-protected-pause.txt"
+$LOKEYS pause "$TEST_ROOT/not-protected-pause.txt"
+echo $?
+$LOKEYS unpause "$TEST_ROOT/not-protected-pause.txt"
+echo $?
+```
+
+Expected:
+
+- Both commands print `<path> is not protected.`
+- Both commands exit `0`
+
 ### 8) Mount exists but not writable by current user
 
 Goal: Verify mount ownership diagnostic.
@@ -609,12 +666,17 @@ readable validation of core logic and command wiring.
   - Covers add/seal command orchestration through `Service` methods with temp
     HOME fixtures and injected mount/key boundaries.
   - Verifies conflict fail-fast behavior, AWS auto-bypass behavior for default
-    credential files, and no partial state mutation.
+    credential files, paused-unseal behavior, seal missing-insecure tolerance,
+    and no partial state mutation.
 - `internal/lokeys/kms_policy_test.go`
   - Covers KMS policy selection for AWS auto-bypass defaults versus non-default
     `.aws/*` paths.
 - `internal/lokeys/list_operation_test.go`
-  - Covers list reporting for externally created untracked RAM-disk files.
+  - Covers list reporting for externally created untracked RAM-disk files and
+    paused managed-file marker rendering.
+- `internal/lokeys/pause_operation_test.go`
+  - Covers pause/unpause config mutation, unmanaged target behavior, and
+    idempotency messaging.
 - `internal/lokeys/backup_operation_test.go`
   - Covers backup command pre-backup enrollment of untracked RAM-disk files.
 - `internal/lokeys/restore_operation_test.go`
@@ -636,8 +698,9 @@ readable validation of core logic and command wiring.
   - Covers session env decoding errors and wrong-key validation behavior for
     existing encrypted files.
 - `internal/lokeys/config_test.go`
-  - Covers atomic config replacement behavior (`write temp + rename`) and
-    resulting file mode expectations.
+  - Covers atomic config replacement behavior (`write temp + rename`), legacy
+    protected-file migration, paused-flag round-trip behavior, and resulting
+    file mode expectations.
 - `internal/lokeys/ramdisk_test.go`
   - Covers mount parsing helper behavior and non-interactive mount prompt
     failure safeguards.
@@ -651,7 +714,8 @@ readable validation of core logic and command wiring.
   - Provides shared test service/key fixtures used by operation/rotation tests
     to keep test modules concise and consistent.
 - `cmd/lokeys/main_test.go`
-  - Covers CLI argument validators and error-to-exit-code mapping (`0/1/2`).
+  - Covers CLI argument validators (including pause/unpause arity) and
+    error-to-exit-code mapping (`0/1/2`).
 
 ### Function-level test index (purpose + function)
 
@@ -680,11 +744,19 @@ readable validation of core logic and command wiring.
   - `TestRunSeal_AWSDefaultsDiscoveryAutoBypass`: verifies seal discovery auto-bypasses default AWS config/credentials.
   - `TestRunSeal_AWSNonDefaultDiscoveryStillNeedsExplicitBypass`: verifies non-default discovered AWS paths require explicit bypass.
   - `TestRunUnseal_AWSDefaultsDoNotRequireKMSHealthCheck`: verifies unseal does not require KMS readiness for default AWS auto-bypass files.
+  - `TestRunUnseal_SkipsPausedFiles`: verifies unseal skips paused entries while restoring unpaused entries.
+  - `TestRunSeal_DoesNotFailWhenManagedInsecureMissing`: verifies seal tolerates managed files missing from RAM-disk and still seals present files.
 - `internal/lokeys/kms_policy_test.go`
   - `TestShouldUseKMSForPortable_AWSDefaultsAutoBypass`: verifies policy auto-bypasses only default AWS config/credentials paths.
   - `TestShouldUseKMSForPortable_NonDefaultAWSPathStillRequiresBypass`: verifies non-default AWS paths still default to KMS.
 - `internal/lokeys/list_operation_test.go`
   - `TestRunList_ShowsExternallyCreatedInsecureFileAsUntracked`: verifies list reports untracked insecure files with `UNTRACKED_INSECURE` status.
+  - `TestRunList_ShowsPausedMarkerForPausedManagedFile`: verifies list appends `PAUSED` marker for paused managed entries.
+- `internal/lokeys/pause_operation_test.go`
+  - `TestRunPause_SetsPausedTrue`: verifies pause flips managed entry to paused.
+  - `TestRunUnpause_SetsPausedFalse`: verifies unpause flips managed entry to active.
+  - `TestRunPauseAndRunUnpause_NonManagedPathReturnsSuccess`: verifies friendly success for unmanaged targets.
+  - `TestRunPauseAndUnpause_AreIdempotent`: verifies repeated pause/unpause calls remain successful with stable state.
 - `internal/lokeys/backup_operation_test.go`
   - `TestRunBackup_EnrollsUntrackedInsecureFilesBeforeArchive`: verifies backup enrolls external RAM files before tar creation.
 - `internal/lokeys/restore_operation_test.go`
@@ -697,6 +769,7 @@ readable validation of core logic and command wiring.
 - `internal/lokeys/seal_plan_test.go`
   - `TestPlanSeal_WithDiscoveredFiles_AppendsConfigWrite`: verifies discovered-file enrollment plans a config write.
   - `TestPlanSeal_NoDiscoveredFiles_SkipsConfigWrite`: verifies no config write is planned when nothing new is enrolled.
+  - `TestPlanSeal_SkipsTrackedWhenInsecureMissing`: verifies tracked files absent from RAM-disk are skipped during seal planning.
 - `internal/lokeys/unseal_plan_test.go`
   - `TestPlanUnseal_DecryptAndSymlinkActions`: verifies unseal planner emits ensure-parent, decrypt, and symlink actions in order.
 - `internal/lokeys/remove_plan_test.go`
@@ -715,6 +788,8 @@ readable validation of core logic and command wiring.
   - `TestValidateKeyForExistingProtectedFiles_WrongKey_Errors`: verifies wrong-key detection against existing secure files.
 - `internal/lokeys/config_test.go`
   - `TestWriteConfigTo_ReplacesConfigContents`: verifies atomic config replacement updates data and preserves expected mode.
+  - `TestReadConfig_LegacyProtectedFilesArrayMigratesToEntries`: verifies legacy string-array format migration to entry objects.
+  - `TestWriteAndReadConfig_PreservesPausedFlagsInNewFormat`: verifies paused flags round-trip in canonical config format.
 - `internal/lokeys/ramdisk_test.go`
   - `TestIsMountedInProcMounts_ParsesEntries`: verifies /proc/mounts parser behavior.
   - `TestEnsureRamdiskMounted_NonTerminalPromptRequired_ErrorsActionably`: verifies clear non-interactive error behavior.
@@ -730,6 +805,7 @@ readable validation of core logic and command wiring.
   - `TestRequireOneArg_ReturnsUsageErrorOnZeroOrMany`: verifies exact-arity enforcement.
   - `TestRequireZeroOrOneArg_ReturnsUsageErrorOnMany`: verifies optional-arg command arity enforcement.
   - `TestRunWithExitStatus_MapsUsageToExitUsageError`: verifies error-to-exit-code mapping (`0/1/2`).
+  - `TestRunPauseAndUnpause_EnforceSingleArgUsage`: verifies pause/unpause enforce single-path arity.
 
 ### How to run automated tests
 

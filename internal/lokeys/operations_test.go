@@ -64,7 +64,7 @@ func TestRunAddProtectsRamdiskCreatedFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read config: %v", err)
 	}
-	if !containsString(cfg.ProtectedFiles, "$HOME/notes/new.txt") {
+	if !cfg.hasProtectedFile("$HOME/notes/new.txt") {
 		t.Fatalf("missing protected file entry: %#v", cfg.ProtectedFiles)
 	}
 }
@@ -152,7 +152,7 @@ func TestRunSealDiscoversAndProtectsRamdiskFiles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read config: %v", err)
 	}
-	if !containsString(cfg.ProtectedFiles, "$HOME/notes/seal-new.txt") {
+	if !cfg.hasProtectedFile("$HOME/notes/seal-new.txt") {
 		t.Fatalf("missing protected file entry: %#v", cfg.ProtectedFiles)
 	}
 }
@@ -223,6 +223,71 @@ func TestRunSealFailsFastOnFirstConflict(t *testing.T) {
 	}
 }
 
+// TestRunSeal_DoesNotFailWhenManagedInsecureMissing verifies seal tolerates
+// managed entries that are absent from RAM-disk and still seals present files.
+func TestRunSeal_DoesNotFailWhenManagedInsecureMissing(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	key, encoded := mustEncodedSessionKey(t)
+	t.Setenv(SessionKeyEnv, encoded)
+
+	presentPortable := "$HOME/docs/present.txt"
+	missingPortable := "$HOME/docs/missing.txt"
+	if _, _, err := ensureConfig(); err != nil {
+		t.Fatalf("ensure config: %v", err)
+	}
+	if err := writeConfig(&config{ProtectedFiles: protectedFilesFromPaths([]string{presentPortable, missingPortable})}); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	presentInsecure := filepath.Join(home, defaultDecryptedRel, "docs", "present.txt")
+	if err := os.MkdirAll(filepath.Dir(presentInsecure), dirPerm); err != nil {
+		t.Fatalf("mkdir present insecure parent: %v", err)
+	}
+	if err := os.WriteFile(presentInsecure, []byte("present-updated\n"), 0600); err != nil {
+		t.Fatalf("write present insecure file: %v", err)
+	}
+
+	missingSecure := filepath.Join(home, defaultEncryptedRel, "docs", "missing.txt")
+	if err := os.MkdirAll(filepath.Dir(missingSecure), dirPerm); err != nil {
+		t.Fatalf("mkdir missing secure parent: %v", err)
+	}
+	originalMissingCiphertext, err := encryptBytes([]byte("missing-original\n"), key)
+	if err != nil {
+		t.Fatalf("encrypt missing secure baseline: %v", err)
+	}
+	if err := os.WriteFile(missingSecure, originalMissingCiphertext, 0600); err != nil {
+		t.Fatalf("write missing secure baseline: %v", err)
+	}
+
+	svc := newTestService()
+	if err := svc.RunSeal(); err != nil {
+		t.Fatalf("RunSeal failed with missing managed insecure file: %v", err)
+	}
+
+	presentSecure := filepath.Join(home, defaultEncryptedRel, "docs", "present.txt")
+	presentCiphertext, err := os.ReadFile(presentSecure)
+	if err != nil {
+		t.Fatalf("read present secure file: %v", err)
+	}
+	presentPlaintext, err := decryptBytes(presentCiphertext, key)
+	if err != nil {
+		t.Fatalf("decrypt present secure file: %v", err)
+	}
+	if string(presentPlaintext) != "present-updated\n" {
+		t.Fatalf("unexpected present secure plaintext: %q", string(presentPlaintext))
+	}
+
+	currentMissingCiphertext, err := os.ReadFile(missingSecure)
+	if err != nil {
+		t.Fatalf("read missing secure file: %v", err)
+	}
+	if string(currentMissingCiphertext) != string(originalMissingCiphertext) {
+		t.Fatalf("expected missing secure file to remain unchanged")
+	}
+}
+
 // TestRunAdd_AWSCredentialsAutoBypassWithoutFlag verifies ~/.aws/credentials
 // is auto-bypassed from KMS when KMS is enabled.
 func TestRunAdd_AWSCredentialsAutoBypassWithoutFlag(t *testing.T) {
@@ -236,7 +301,7 @@ func TestRunAdd_AWSCredentialsAutoBypassWithoutFlag(t *testing.T) {
 	if _, _, err := ensureConfig(); err != nil {
 		t.Fatalf("ensure config: %v", err)
 	}
-	if err := writeConfig(&config{ProtectedFiles: []string{}, KMS: &kmsConfig{Enabled: true, KeyID: "alias/lokeys", Region: "us-east-1"}}); err != nil {
+	if err := writeConfig(newConfigFixtureBuilder().WithKMSEnabled("alias/lokeys", "us-east-1").Build()); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 
@@ -283,7 +348,7 @@ func TestRunAdd_AWSNonDefaultPathStillRequiresExplicitBypass(t *testing.T) {
 	if _, _, err := ensureConfig(); err != nil {
 		t.Fatalf("ensure config: %v", err)
 	}
-	if err := writeConfig(&config{ProtectedFiles: []string{}, KMS: &kmsConfig{Enabled: true, KeyID: "alias/lokeys", Region: "us-east-1"}}); err != nil {
+	if err := writeConfig(newConfigFixtureBuilder().WithKMSEnabled("alias/lokeys", "us-east-1").Build()); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 
@@ -329,7 +394,7 @@ func TestRunSeal_AWSDefaultsDiscoveryAutoBypass(t *testing.T) {
 	if _, _, err := ensureConfig(); err != nil {
 		t.Fatalf("ensure config: %v", err)
 	}
-	if err := writeConfig(&config{ProtectedFiles: []string{}, KMS: &kmsConfig{Enabled: true, KeyID: "alias/lokeys", Region: "us-east-1"}}); err != nil {
+	if err := writeConfig(newConfigFixtureBuilder().WithKMSEnabled("alias/lokeys", "us-east-1").Build()); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 
@@ -374,7 +439,7 @@ func TestRunSeal_AWSNonDefaultDiscoveryStillNeedsExplicitBypass(t *testing.T) {
 	if _, _, err := ensureConfig(); err != nil {
 		t.Fatalf("ensure config: %v", err)
 	}
-	if err := writeConfig(&config{ProtectedFiles: []string{}, KMS: &kmsConfig{Enabled: true, KeyID: "alias/lokeys", Region: "us-east-1"}}); err != nil {
+	if err := writeConfig(newConfigFixtureBuilder().WithKMSEnabled("alias/lokeys", "us-east-1").Build()); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 
@@ -433,7 +498,7 @@ func TestRunUnseal_AWSDefaultsDoNotRequireKMSHealthCheck(t *testing.T) {
 		t.Fatalf("ensure config: %v", err)
 	}
 
-	if err := writeConfig(&config{ProtectedFiles: []string{awsConfigPortable}, KMS: &kmsConfig{Enabled: true, KeyID: "alias/lokeys", Region: ""}}); err != nil {
+	if err := writeConfig(newConfigFixtureBuilder().WithManagedFile(awsConfigPortable).WithKMSEnabled("alias/lokeys", "").Build()); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 
@@ -479,10 +544,7 @@ func TestRunUnseal_AWSDefaultsDecryptBeforeKMSFailure(t *testing.T) {
 	}
 
 	kmsPortable := filepath.Join("$HOME", "work", "kms-only.txt")
-	if err := writeConfig(&config{
-		ProtectedFiles: []string{awsConfigPortable, kmsPortable},
-		KMS:            &kmsConfig{Enabled: true, KeyID: "alias/lokeys", Region: ""},
-	}); err != nil {
+	if err := writeConfig(newConfigFixtureBuilder().WithManagedFiles(awsConfigPortable, kmsPortable).WithKMSEnabled("alias/lokeys", "invalid-region-1").Build()); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 
@@ -500,6 +562,96 @@ func TestRunUnseal_AWSDefaultsDecryptBeforeKMSFailure(t *testing.T) {
 	}
 	if !fileExists(filepath.Join(home, defaultDecryptedRel, ".aws", "config")) {
 		t.Fatalf("expected unsealed aws config in insecure dir")
+	}
+}
+
+// TestRunUnseal_SkipsPausedFiles verifies paused entries are not extracted,
+// while unpaused entries are restored as normal in the same unseal run.
+func TestRunUnseal_SkipsPausedFiles(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	key, encoded := mustEncodedSessionKey(t)
+	t.Setenv(SessionKeyEnv, encoded)
+
+	pausedPortable := "$HOME/docs/paused.txt"
+	unpausedPortable := "$HOME/docs/unpaused.txt"
+
+	pausedSecure := filepath.Join(home, defaultEncryptedRel, "docs", "paused.txt")
+	unpausedSecure := filepath.Join(home, defaultEncryptedRel, "docs", "unpaused.txt")
+	if err := os.MkdirAll(filepath.Dir(pausedSecure), dirPerm); err != nil {
+		t.Fatalf("mkdir secure dir: %v", err)
+	}
+
+	pausedCiphertext, err := encryptBytes([]byte("paused-secret\n"), key)
+	if err != nil {
+		t.Fatalf("encrypt paused file: %v", err)
+	}
+	if err := os.WriteFile(pausedSecure, pausedCiphertext, 0600); err != nil {
+		t.Fatalf("write paused secure file: %v", err)
+	}
+
+	unpausedCiphertext, err := encryptBytes([]byte("unpaused-secret\n"), key)
+	if err != nil {
+		t.Fatalf("encrypt unpaused file: %v", err)
+	}
+	if err := os.WriteFile(unpausedSecure, unpausedCiphertext, 0600); err != nil {
+		t.Fatalf("write unpaused secure file: %v", err)
+	}
+
+	pausedHome := filepath.Join(home, "docs", "paused.txt")
+	unpausedHome := filepath.Join(home, "docs", "unpaused.txt")
+	if err := os.MkdirAll(filepath.Dir(pausedHome), dirPerm); err != nil {
+		t.Fatalf("mkdir home dir: %v", err)
+	}
+	if err := os.WriteFile(pausedHome, []byte("keep-local\n"), 0600); err != nil {
+		t.Fatalf("write paused home file: %v", err)
+	}
+	if err := os.WriteFile(unpausedHome, []byte("replace-me\n"), 0600); err != nil {
+		t.Fatalf("write unpaused home file: %v", err)
+	}
+	if _, _, err := ensureConfig(); err != nil {
+		t.Fatalf("ensure config: %v", err)
+	}
+
+	if err := writeConfig(newConfigFixtureBuilder().WithManagedFilePaused(pausedPortable, true).WithManagedFilePaused(unpausedPortable, false).Build()); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	svc := newTestService()
+	if err := svc.RunUnseal(); err != nil {
+		t.Fatalf("RunUnseal failed: %v", err)
+	}
+
+	pausedInsecure := filepath.Join(home, defaultDecryptedRel, "docs", "paused.txt")
+	if fileExists(pausedInsecure) {
+		t.Fatalf("expected paused file to remain absent in insecure dir")
+	}
+	pausedInfo, err := os.Lstat(pausedHome)
+	if err != nil {
+		t.Fatalf("lstat paused home path: %v", err)
+	}
+	if pausedInfo.Mode()&os.ModeSymlink != 0 {
+		t.Fatalf("expected paused home path to remain regular file")
+	}
+
+	unpausedInsecure := filepath.Join(home, defaultDecryptedRel, "docs", "unpaused.txt")
+	if !fileExists(unpausedInsecure) {
+		t.Fatalf("expected unpaused file in insecure dir")
+	}
+	unsealedBytes, err := os.ReadFile(unpausedInsecure)
+	if err != nil {
+		t.Fatalf("read unpaused insecure file: %v", err)
+	}
+	if string(unsealedBytes) != "unpaused-secret\n" {
+		t.Fatalf("unexpected unpaused content: %q", string(unsealedBytes))
+	}
+	unpausedInfo, err := os.Lstat(unpausedHome)
+	if err != nil {
+		t.Fatalf("lstat unpaused home path: %v", err)
+	}
+	if unpausedInfo.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("expected unpaused home path to be replaced with symlink")
 	}
 }
 

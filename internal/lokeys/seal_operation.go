@@ -50,77 +50,142 @@ func (s *Service) RunSealWithOptions(opts SealOptions) error {
 		return fmt.Errorf("ensure ramdisk mounted: %w", err)
 	}
 
-	if _, err := s.sealTrackedAndDiscovered(cfg, paths, key, opts); err != nil {
+	input, err := collectSealPlanInput(paths, cfg, opts)
+	if err != nil {
+		return err
+	}
+	if _, err := s.sealWithPlanInput(input, key); err != nil {
 		return err
 	}
 	vlogf("seal complete")
 	return nil
 }
 
-func (s *Service) sealTrackedAndDiscovered(cfg *config, paths appPaths, key []byte, opts SealOptions) (*config, error) {
-	vlogf("seal tracked=%d", len(cfg.ProtectedFiles))
-	trackedRels := make(map[string]struct{}, len(cfg.ProtectedFiles))
-	trackedFiles := make([]trackedFile, 0, len(cfg.ProtectedFiles))
-	for _, portable := range cfg.ProtectedFiles {
-		tracked, err := buildTrackedFileFromPortable(paths.Home, paths.SecureDir, paths.InsecureDir, portable)
-		if err != nil {
-			return nil, fmt.Errorf("resolve tracked path %s: %w", portable, err)
-		}
-		trackedRels[tracked.Rel] = struct{}{}
-		trackedFiles = append(trackedFiles, tracked)
-	}
+func (s *Service) sealWithPlanInput(input sealPlanInput, key []byte) (*config, error) {
+	vlogf("seal tracked=%d", len(input.Tracked))
+	vlogf("seal discovered_untracked=%d", len(input.Discovered))
 
-	discovered, err := collectUntrackedRamdiskFiles(paths, trackedRels)
-	if err != nil {
-		return nil, err
-	}
-	vlogf("seal discovered_untracked=%d", len(discovered))
-
-	allowBypass := map[string]struct{}{}
-	for _, raw := range opts.AllowKMSBypassFiles {
-		normalized, err := normalizePortableBypassInput(raw)
-		if err != nil {
-			return nil, err
+	if _, enabled := input.Config.kmsRuntimeConfig(); enabled {
+		kmsDecision := decideSealKMSPolicy(input.Config, input.TrackedExistingInsecure, input.Discovered, input.AllowBypass)
+		if len(kmsDecision.BlockedBypass) > 0 {
+			return nil, fmt.Errorf("kms is enabled; refusing to auto-protect AWS credential files without explicit bypass: %s; rerun with --allow-kms-bypass-file for each file", strings.Join(kmsDecision.BlockedBypass, ", "))
 		}
-		allowBypass[normalized] = struct{}{}
-	}
-	if _, enabled := cfg.kmsRuntimeConfig(); enabled {
-		blocked := []string{}
-		requiresKMS := anyPortableRequiresKMS(cfg, cfg.ProtectedFiles)
-		for _, tf := range discovered {
-			if !isAWSCredentialPortablePath(tf.Portable) {
-				requiresKMS = true
-				continue
-			}
-			if isAWSAutoBypassPortable(tf.Portable) {
-				continue
-			}
-			if _, ok := allowBypass[tf.Portable]; ok {
-				continue
-			}
-			blocked = append(blocked, tf.Portable)
-		}
-		if len(blocked) > 0 {
-			return nil, fmt.Errorf("kms is enabled; refusing to auto-protect AWS credential files without explicit bypass: %s; rerun with --allow-kms-bypass-file for each file", strings.Join(blocked, ", "))
-		}
-		if requiresKMS {
-			if err := ensureKMSReady(cfg); err != nil {
+		if kmsDecision.RequiresKMS {
+			if err := ensureKMSReady(input.Config); err != nil {
 				return nil, err
 			}
 		}
 	}
 
-	p, updated := planSeal(paths, cfg, trackedFiles, discovered, key, allowBypass)
+	p, updated := planSeal(input.Paths, input.Config, input.Tracked, input.Discovered, key, input.AllowBypass)
 	if err := s.applyPlan(p); err != nil {
 		return nil, err
 	}
 	return updated, nil
 }
 
+func (s *Service) sealTrackedAndDiscovered(cfg *config, paths appPaths, key []byte, opts SealOptions) (*config, error) {
+	input, err := collectSealPlanInput(paths, cfg, opts)
+	if err != nil {
+		return nil, err
+	}
+	return s.sealWithPlanInput(input, key)
+}
+
+type sealPlanInput struct {
+	Paths                   appPaths
+	Config                  *config
+	Tracked                 []trackedFile
+	TrackedExistingInsecure []trackedFile
+	Discovered              []trackedFile
+	AllowBypass             map[string]struct{}
+}
+
+func collectSealPlanInput(paths appPaths, cfg *config, opts SealOptions) (sealPlanInput, error) {
+	trackedRels := make(map[string]struct{}, len(cfg.ProtectedFiles))
+	trackedFiles := make([]trackedFile, 0, len(cfg.ProtectedFiles))
+	trackedExistingInsecure := make([]trackedFile, 0, len(cfg.ProtectedFiles))
+	for _, entry := range cfg.ProtectedFiles {
+		portable := entry.Path
+		tracked, err := buildTrackedFileFromPortable(paths.Home, paths.SecureDir, paths.InsecureDir, portable)
+		if err != nil {
+			return sealPlanInput{}, fmt.Errorf("resolve tracked path %s: %w", portable, err)
+		}
+		trackedRels[tracked.Rel] = struct{}{}
+		trackedFiles = append(trackedFiles, tracked)
+		if fileExists(tracked.InsecurePath) {
+			trackedExistingInsecure = append(trackedExistingInsecure, tracked)
+		}
+	}
+
+	discovered, err := collectUntrackedRamdiskFiles(paths, trackedRels)
+	if err != nil {
+		return sealPlanInput{}, err
+	}
+
+	allowBypass := map[string]struct{}{}
+	for _, raw := range opts.AllowKMSBypassFiles {
+		normalized, err := normalizePortableBypassInput(raw)
+		if err != nil {
+			return sealPlanInput{}, err
+		}
+		allowBypass[normalized] = struct{}{}
+	}
+
+	return sealPlanInput{
+		Paths:                   paths,
+		Config:                  cfg,
+		Tracked:                 trackedFiles,
+		TrackedExistingInsecure: trackedExistingInsecure,
+		Discovered:              discovered,
+		AllowBypass:             allowBypass,
+	}, nil
+}
+
+type sealKMSDecision struct {
+	RequiresKMS   bool
+	BlockedBypass []string
+}
+
+func decideSealKMSPolicy(cfg *config, trackedExistingInsecure []trackedFile, discovered []trackedFile, allowBypass map[string]struct{}) sealKMSDecision {
+	decision := sealKMSDecision{}
+	for _, tf := range trackedExistingInsecure {
+		if shouldUseKMSForPortable(cfg, tf.Portable) {
+			decision.RequiresKMS = true
+			break
+		}
+	}
+
+	for _, tf := range discovered {
+		if !isAWSCredentialPortablePath(tf.Portable) {
+			decision.RequiresKMS = true
+			continue
+		}
+		if isAWSAutoBypassPortable(tf.Portable) {
+			continue
+		}
+		if _, ok := allowBypass[tf.Portable]; ok {
+			continue
+		}
+		decision.BlockedBypass = append(decision.BlockedBypass, tf.Portable)
+	}
+	return decision
+}
+
 func planSeal(paths appPaths, cfg *config, tracked []trackedFile, discovered []trackedFile, key []byte, allowBypass map[string]struct{}) (plan, *config) {
+	// Invariants for tracked files:
+	// - Missing insecure sources are non-fatal and skipped.
+	// - No config mutation occurs for tracked-only sealing.
+	// Invariants for discovered files:
+	// - Enrollment is explicit in this planner and always paired with a config
+	//   write action.
+	// - KMS bypass decisions are persisted via updated.KMSBypassFiles.
 	actions := []action{{Kind: actionEnsureEncryptedDir, Path: paths.SecureDir}}
 	kmsCfg, _ := cfg.kmsRuntimeConfig()
 	for _, tf := range tracked {
+		if !fileExists(tf.InsecurePath) {
+			continue
+		}
 		useKMS := shouldUseKMSForPortable(cfg, tf.Portable)
 		actions = append(actions,
 			action{Kind: actionEnsureParentDir, Path: tf.SecurePath},
@@ -130,7 +195,7 @@ func planSeal(paths appPaths, cfg *config, tracked []trackedFile, discovered []t
 
 	updated := cfg
 	if len(discovered) > 0 {
-		updated = &config{ProtectedFiles: append([]string{}, cfg.ProtectedFiles...)}
+		updated = &config{ProtectedFiles: cfg.protectedFileEntries()}
 		updated.KMSBypassFiles = append([]string{}, cfg.KMSBypassFiles...)
 		if cfg.KMS != nil {
 			kms := *cfg.KMS
@@ -149,7 +214,7 @@ func planSeal(paths appPaths, cfg *config, tracked []trackedFile, discovered []t
 				action{Kind: actionEncryptFile, Source: tf.InsecurePath, Path: tf.SecurePath, Key: key, UseKMS: useKMS, KMS: kmsCfg},
 				action{Kind: actionReplaceWithSymlink, Path: tf.HomePath, Target: tf.InsecurePath},
 			)
-			updated.ProtectedFiles = append(updated.ProtectedFiles, tf.Portable)
+			updated.ProtectedFiles = append(updated.ProtectedFiles, protectedFile{Path: tf.Portable})
 		}
 		actions = append(actions, action{Kind: actionWriteConfig, Config: updated})
 	}

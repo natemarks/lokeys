@@ -25,7 +25,7 @@ func (s *Service) RunBackup() (string, error) {
 	if err := s.validateKeyForExistingProtectedFiles(cfg, key); err != nil {
 		return "", err
 	}
-	if anyPortableRequiresKMS(cfg, cfg.ProtectedFiles) {
+	if anyPortableRequiresKMS(cfg, cfg.protectedFilePaths()) {
 		if err := ensureKMSReady(cfg); err != nil {
 			return "", err
 		}

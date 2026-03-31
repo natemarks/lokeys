@@ -12,7 +12,7 @@ import "testing"
 // 2. Build the remove plan for index 0.
 // 3. Assert the plan starts with restore and ends with config persistence.
 func TestPlanRemove_ManagedSymlink_RestoreAndCleanupActions(t *testing.T) {
-	cfg := &config{ProtectedFiles: []string{"$HOME/a.txt", "$HOME/b.txt"}}
+	cfg := &config{ProtectedFiles: protectedFilesFromPaths([]string{"$HOME/a.txt", "$HOME/b.txt"})}
 	tracked := trackedFile{HomePath: "/home/u/a.txt", InsecurePath: "/ram/a.txt", SecurePath: "/secure/a.txt"}
 	p := planRemove(cfg, 0, tracked)
 	if len(p.Actions) != 4 {

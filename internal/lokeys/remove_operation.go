@@ -27,13 +27,7 @@ func (s *Service) RunRemove(pathArg string) error {
 		return fmt.Errorf("ensure config: %w", err)
 	}
 
-	idx := -1
-	for i, p := range cfg.ProtectedFiles {
-		if p == portable {
-			idx = i
-			break
-		}
-	}
+	idx := cfg.protectedFileIndex(portable)
 	if idx == -1 {
 		fmt.Fprintf(s.stdout(), "%s is not protected.\n", portable)
 		return nil
@@ -59,8 +53,12 @@ func (s *Service) RunRemove(pathArg string) error {
 }
 
 func planRemove(cfg *config, idx int, tracked trackedFile) plan {
-	updated := &config{ProtectedFiles: append([]string{}, cfg.ProtectedFiles...)}
-	updated.ProtectedFiles = append(updated.ProtectedFiles[:idx], updated.ProtectedFiles[idx+1:]...)
+	// Invariant: remove always persists config, even when managed artifacts are
+	// already missing on disk. Path removals are best-effort via IgnoreNotExist,
+	// keeping command behavior idempotent for repeated cleanup attempts.
+	updated := &config{ProtectedFiles: cfg.protectedFileEntries()}
+	_ = idx // idx is resolved by caller for user-facing not-protected behavior.
+	updated.removeProtectedFile(tracked.Portable)
 	updated.KMSBypassFiles = make([]string, 0, len(cfg.KMSBypassFiles))
 	for _, p := range cfg.KMSBypassFiles {
 		if p == tracked.Portable {
