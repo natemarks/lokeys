@@ -14,6 +14,13 @@ RELEASE_ALLOW_NON_MAIN ?=0
 RELEASE_ALLOW_RETAG ?=0
 RELEASE_SKIP_STATIC ?=0
 CONFIRM ?=0
+COVERAGE_DIR := .coverage
+COVERAGE_PROFILE := $(COVERAGE_DIR)/internal_lokeys.out
+CRITICAL_COVERAGE_TARGETS := \
+	internal/lokeys/list_operation.go=75 \
+	internal/lokeys/pause_operation.go=79 \
+	internal/lokeys/seal_operation.go=70 \
+	internal/lokeys/unseal_operation.go=65
 DIST_DIR := dist
 RELEASE_ROOT := $(DIST_DIR)/release
 RELEASE_DIR := $(RELEASE_ROOT)/$(RELEASE_TAG)
@@ -28,7 +35,7 @@ ifneq ($(strip $(INTEGRATION_SH_FILES)),)
 SH_FILES := $(INTEGRATION_SH_FILES)
 endif
 
-.PHONY: static go-static bash-static gofmt-check go-vet golint go-deadcode go-test shfmt-check shellcheck build git-clean integration-preflight-local integration-preflight-kms test-integration-local test-integration-kms test-integration integration-workflows integration-workflows-local integration-workflows-kms release release-dry-run release-check release-clean release-build-linux release-checksums release-create release-upload release-tag-check release-tag release-tag-push release-all
+.PHONY: static go-static bash-static gofmt-check go-vet golint go-deadcode go-test coverage-critical ci shfmt-check shellcheck build git-clean integration-preflight-local integration-preflight-kms test-integration-local test-integration-kms test-integration integration-workflows integration-workflows-local integration-workflows-kms release release-dry-run release-check release-clean release-build-linux release-checksums release-create release-upload release-tag-check release-tag release-tag-push release-all
 
 static: go-static bash-static ## Run all static checks.
 
@@ -64,6 +71,17 @@ go-deadcode: ## Run deadcode analysis.
 
 go-test: ## Run Go tests.
 	go test ./...
+
+coverage-critical: ## Enforce focused coverage thresholds for critical operation/planner logic.
+	@mkdir -p "$(COVERAGE_DIR)"
+	go test ./internal/lokeys -coverprofile="$(COVERAGE_PROFILE)"
+	@args=""; \
+	for spec in $(CRITICAL_COVERAGE_TARGETS); do \
+		args="$$args --require $$spec"; \
+	done; \
+	go run ./tools/coverage-gate --profile "$(COVERAGE_PROFILE)" $$args
+
+ci: static coverage-critical ## Run CI-quality checks, including targeted coverage gates.
 
 shfmt-check: ## Check Bash formatting with shfmt.
 	@if [ -n "$(SH_FILES)" ]; then \

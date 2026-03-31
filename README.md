@@ -620,6 +620,20 @@ Integration scripts set all lokeys path overrides to temporary locations:
 
 This keeps tests isolated from your real home directory and config.
 
+## CI quality gates
+
+Run static checks plus targeted coverage gates for logic-heavy pause/list/seal/unseal paths:
+
+```bash
+make ci
+```
+
+Run only the targeted coverage gate:
+
+```bash
+make coverage-critical
+```
+
 ## Troubleshooting
 
 - Wrong key in environment:
